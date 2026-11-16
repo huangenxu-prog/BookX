@@ -1,6 +1,7 @@
 import XCTest
 
 final class BookXUITests: XCTestCase {
+    override func setUpWithError() throws { continueAfterFailure = false }
     private func launchFresh() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["BOOKX_UI_TEST_RESET"] = "1"
@@ -56,10 +57,9 @@ final class BookXUITests: XCTestCase {
         app.buttons["library-book-阅读测试"].tap()
         XCTAssertTrue(app.staticTexts["reading-position"].waitForExistence(timeout: 15))
         app.buttons["阅读设置"].tap()
-        let mode = app.buttons["page-mode-picker"]
-        for _ in 0..<3 { if !mode.isHittable { app.swipeUp() } }
-        mode.tap()
-        app.buttons["上下滚动"].tap()
+        let scrolling = app.buttons["上下滚动"]
+        XCTAssertTrue(scrolling.waitForExistence(timeout: 5))
+        scrolling.tap()
         app.buttons["完成"].tap()
         for _ in 0..<4 { app.swipeUp() }
         let position = app.staticTexts["reading-position"]

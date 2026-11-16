@@ -386,7 +386,7 @@ struct RootView: View {
                     .frame(maxWidth: .infinity).frame(height: 68)
                     .background(BookXStyle.purple.gradient, in: Capsule())
             }.accessibilityLabel("导入书籍").disabled(library.importing)
-            tabButton("book.open", "书库", index: 1)
+            tabButton("book", "书库", index: 1)
         }
         .padding(7)
         .background(.white.opacity(0.9), in: Capsule())
@@ -415,10 +415,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("翻页方式") {
+                    Picker("翻页", selection: $library.pageMode) {
+                        Text("左右翻页").tag(0)
+                        Text("上下滚动").tag(1)
+                    }.pickerStyle(.segmented).accessibilityIdentifier("page-mode-picker")
+                }
                 Section("字体大小") { Slider(value: $library.fontSize, in: 14...30, step: 1); Text("\(Int(library.fontSize)) pt") }
                 Section("段落行距") { Slider(value: $library.lineSpacing, in: 2...20, step: 1) }
                 Section("阅读背景") { Picker("背景", selection: $library.paper) { Text("白色").tag(0); Text("米黄").tag(1); Text("护眼绿").tag(2); Text("深色").tag(3) } }
-                Section("翻页方式") { Picker("翻页", selection: $library.pageMode) { Text("左右翻页").tag(0); Text("上下滚动").tag(1) }.accessibilityIdentifier("page-mode-picker") }
+
             }
             .navigationTitle("阅读设置").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { library.save(); dismiss() } } }
