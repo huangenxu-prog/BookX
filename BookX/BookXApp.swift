@@ -132,12 +132,12 @@ final class BookLibrary: ObservableObject {
 }
 
 private enum BookXStyle {
-    static let purple = Color(red: 0.72, green: 0.25, blue: 0.19) // Terracotta accent
-    static let lilac = Color(red: 0.92, green: 0.87, blue: 0.77) // Warm sand
-    static let ink = Color(red: 0.15, green: 0.14, blue: 0.12)
-    static let muted = Color(red: 0.57, green: 0.55, blue: 0.50)
-    static let paper = Color(red: 0.985, green: 0.971, blue: 0.942)
-    static let panel = Color(red: 0.962, green: 0.940, blue: 0.900)
+    static let purple = Color(red: 0.14, green: 0.32, blue: 0.26) // Forest green
+    static let lilac = Color(red: 0.86, green: 0.91, blue: 0.85) // Soft sage
+    static let ink = Color(red: 0.14, green: 0.19, blue: 0.16)
+    static let muted = Color(red: 0.47, green: 0.53, blue: 0.49)
+    static let paper = Color(red: 0.973, green: 0.977, blue: 0.960)
+    static let panel = Color.white.opacity(0.84)
 }
 
 private struct BookCover: View {
