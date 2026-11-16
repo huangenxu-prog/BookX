@@ -29,7 +29,8 @@ struct ReaderView: View {
                 Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
                     .accessibilityLabel("返回")
                 Spacer()
-                Text(book.title).font(.subheadline).lineLimit(1)
+                Text(book.title).font(.subheadline).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity)
                 Spacer()
                 Button { settings = true } label: { Image(systemName: "textformat.size").frame(width: 44, height: 44) }
                     .accessibilityLabel("阅读设置")
@@ -42,13 +43,18 @@ struct ReaderView: View {
                 ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if library.pageMode == 0 {
                 CurlPageView(pages: pages.map(\.text), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
-            } else if library.pageMode == 1 || library.pageMode == 2 {
+                    .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
+            } else if library.pageMode == 1 {
                 TabView(selection: $currentPage) {
                     ForEach(pages.indices, id: \.self) { i in
                         ScrollView { pageText(i).padding(.vertical, 20) }.tag(i)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+            } else if library.pageMode == 2 {
+                CoverPageView(pages: pages.map(\\.text), currentPage: $currentPage,
+                              fontSize: library.fontSize, lineSpacing: library.lineSpacing,
+                              ink: ink, background: bg)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
