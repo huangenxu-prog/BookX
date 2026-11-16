@@ -30,7 +30,7 @@ struct CurlPageView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIPageViewController, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self
-        if coordinator.pages != pages || coordinator.fontSize != fontSize || coordinator.lineSpacing != lineSpacing {
+        if coordinator.pages.count != pages.count || coordinator.fontSize != fontSize || coordinator.lineSpacing != lineSpacing {
             coordinator.rebuild(pages: pages, fontSize: fontSize, lineSpacing: lineSpacing, ink: ink, background: background)
         }
         guard let target = coordinator.controller(at: currentPage),
@@ -53,33 +53,36 @@ struct CurlPageView: UIViewControllerRepresentable {
         var pages: [String] = []
         var fontSize: Double = 0
         var lineSpacing: Double = 0
-        var controllers: [IndexedPageController] = []
+        var controllers: [Int: IndexedPageController] = [:]
         init(_ parent: CurlPageView) { self.parent = parent }
 
         func rebuild(pages: [String], fontSize: Double, lineSpacing: Double, ink: Color, background: Color) {
             self.pages = pages
             self.fontSize = fontSize
             self.lineSpacing = lineSpacing
-            controllers = pages.enumerated().map { index, text in
-                let view = AnyView(
-                    ScrollView {
-                        Text(text)
-                            .font(.system(size: fontSize))
-                            .lineSpacing(lineSpacing)
-                            .foregroundStyle(ink)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(24)
-                    }
-                    .background(background)
-                )
-                let controller = IndexedPageController(index: index, view: view)
-                controller.view.backgroundColor = UIColor(background)
-                return controller
-            }
+            controllers.removeAll()
         }
 
         func controller(at index: Int) -> IndexedPageController? {
-            controllers.indices.contains(index) ? controllers[index] : nil
+            guard pages.indices.contains(index) else { return nil }
+            if let cached = controllers[index] { return cached }
+            let view = AnyView(
+                ScrollView {
+                    Text(pages[index])
+                        .font(.system(size: fontSize))
+                        .lineSpacing(lineSpacing)
+                        .foregroundStyle(parent.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(24)
+                }
+                .background(parent.background)
+            )
+            let result = IndexedPageController(index: index, view: view)
+            result.view.backgroundColor = UIColor(parent.background)
+            // Keep only a small neighborhood rather than thousands of hosting controllers.
+            controllers = controllers.filter { abs($0.key - index) <= 3 }
+            controllers[index] = result
+            return result
         }
         func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
             guard let page = viewController as? IndexedPageController else { return nil }
