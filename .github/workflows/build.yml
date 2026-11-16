@@ -1,0 +1,23 @@
+name: Build BookX iOS
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build simulator app
+        run: |
+          set -o pipefail
+          xcodebuild -project BookX.xcodeproj -scheme BookX -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tee build.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BookX-build-log
+          path: build.log
