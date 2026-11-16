@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreFoundation
 
 struct ReaderView: View {
     let book: BookItem
