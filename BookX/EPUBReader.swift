@@ -71,7 +71,7 @@ enum EPUBReader {
         let entities = ["&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'"]
         var result = plain
         for (entity, replacement) in entities { result = result.replacingOccurrences(of: entity, with: replacement) }
-        return result.replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+        return result.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
     }
 
     private static func matches(_ text: String, pattern: String) -> [String] {
