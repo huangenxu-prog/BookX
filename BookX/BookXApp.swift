@@ -132,10 +132,12 @@ final class BookLibrary: ObservableObject {
 }
 
 private enum BookXStyle {
-    static let purple = Color(red: 0.43, green: 0.16, blue: 0.60)
-    static let lilac = Color(red: 0.91, green: 0.83, blue: 0.98)
-    static let ink = Color(red: 0.16, green: 0.11, blue: 0.23)
-    static let muted = Color(red: 0.48, green: 0.43, blue: 0.55)
+    static let purple = Color(red: 0.72, green: 0.25, blue: 0.19) // Terracotta accent
+    static let lilac = Color(red: 0.92, green: 0.87, blue: 0.77) // Warm sand
+    static let ink = Color(red: 0.15, green: 0.14, blue: 0.12)
+    static let muted = Color(red: 0.57, green: 0.55, blue: 0.50)
+    static let paper = Color(red: 0.985, green: 0.971, blue: 0.942)
+    static let panel = Color(red: 0.962, green: 0.940, blue: 0.900)
 }
 
 private struct BookCover: View {
@@ -143,31 +145,46 @@ private struct BookCover: View {
     let large: Bool
     private var palette: [Color] {
         let palettes: [[Color]] = [
-            [Color(red: 0.79, green: 0.88, blue: 0.81), Color(red: 0.91, green: 0.96, blue: 0.90)],
-            [Color(red: 0.95, green: 0.83, blue: 0.68), Color(red: 0.99, green: 0.94, blue: 0.85)],
-            [Color(red: 0.79, green: 0.85, blue: 0.95), Color(red: 0.93, green: 0.95, blue: 0.99)],
-            [Color(red: 0.91, green: 0.86, blue: 0.72), Color(red: 0.98, green: 0.95, blue: 0.85)]
+            [Color(red: 0.31, green: 0.47, blue: 0.41), Color(red: 0.09, green: 0.24, blue: 0.20)],
+            [Color(red: 0.83, green: 0.83, blue: 0.81), Color(red: 0.16, green: 0.17, blue: 0.17)],
+            [Color(red: 0.88, green: 0.86, blue: 0.79), Color(red: 0.18, green: 0.18, blue: 0.17)],
+            [Color(red: 0.75, green: 0.67, blue: 0.53), Color(red: 0.20, green: 0.17, blue: 0.14)]
         ]
         let index = title.unicodeScalars.reduce(0) { $0 + Int($1.value) } % palettes.count
         return palettes[index]
     }
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 11)
-                .fill(LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing))
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(BookXStyle.ink.opacity(0.18), lineWidth: 1)
-                .padding(9)
-            Text(title)
-                .font(.system(size: large ? 23 : 15, weight: .semibold, design: .serif))
-                .foregroundStyle(BookXStyle.ink)
-                .multilineTextAlignment(.center)
-                .lineLimit(4)
-                .minimumScaleFactor(0.6)
-                .padding(15)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(LinearGradient(colors: palette, startPoint: .top, endPoint: .bottom))
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(.white.opacity(0.28), lineWidth: 1)
+                .padding(.leading, 11).padding(.trailing, 7).padding(.vertical, 7)
+            HStack(spacing: 0) {
+                Rectangle().fill(.black.opacity(0.18)).frame(width: 6)
+                Rectangle().fill(.white.opacity(0.13)).frame(width: 2)
+                Spacer(minLength: 0)
+            }
+            HStack(alignment: .top) {
+                Text("读")
+                    .font(.system(size: large ? 10 : 7, weight: .bold))
+                    .foregroundStyle(BookXStyle.purple)
+                    .padding(4)
+                    .background(BookXStyle.paper.opacity(0.95), in: RoundedRectangle(cornerRadius: 2))
+                Spacer()
+                Text(title)
+                    .font(.system(size: large ? 21 : 13, weight: .semibold, design: .serif))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(5)
+                    .minimumScaleFactor(0.65)
+                    .frame(maxWidth: large ? 42 : 30)
+            }
+            .padding(.horizontal, large ? 15 : 10)
+            .padding(.top, large ? 19 : 12)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
         .aspectRatio(0.69, contentMode: .fit)
-        .shadow(color: BookXStyle.purple.opacity(0.10), radius: 8, y: 5)
+        .shadow(color: .black.opacity(0.17), radius: 9, x: 2, y: 8)
         .accessibilityLabel("封面：\(title)")
     }
 }
@@ -197,11 +214,7 @@ struct RootView: View {
     }
     var body: some View {
         ZStack {
-            LinearGradient(colors: [
-                Color(red: 0.92, green: 0.82, blue: 0.97),
-                Color(red: 0.97, green: 0.94, blue: 1.0),
-                Color(red: 0.99, green: 0.97, blue: 1.0)
-            ], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            BookXStyle.paper.ignoresSafeArea()
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
@@ -248,35 +261,34 @@ struct RootView: View {
         }
     }
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "book.closed.fill").font(.title2)
-                Text("BookX").font(.system(size: 24, weight: .bold, design: .serif))
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .center, spacing: 9) {
+                Text(tab == 0 ? "书架" : "书库")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundStyle(BookXStyle.ink)
+                Text("阅")
+                    .font(.system(size: 11, weight: .bold, design: .serif))
+                    .foregroundStyle(.white)
+                    .frame(width: 23, height: 23)
+                    .background(BookXStyle.purple, in: RoundedRectangle(cornerRadius: 5))
                 Spacer()
                 if tab == 0 {
                     Button { settings = true } label: {
                         Image(systemName: "slider.horizontal.3")
-                            .font(.title3.weight(.medium))
-                            .frame(width: 50, height: 50)
-                            .background(.white.opacity(0.75), in: Circle())
-                            .shadow(color: BookXStyle.purple.opacity(0.1), radius: 9, y: 4)
-                    }
-                    .accessibilityLabel("阅读设置")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(BookXStyle.ink)
+                            .frame(width: 46, height: 46)
+                            .background(BookXStyle.panel, in: Circle())
+                    }.accessibilityLabel("阅读设置")
                 }
             }
-            .foregroundStyle(BookXStyle.purple)
-            Text(tab == 0 ? "书架" : "书库")
-                .font(.system(size: 43, weight: .bold, design: .serif))
-                .foregroundStyle(BookXStyle.ink)
             Text(tab == 0 ? "读过 \(recent.count) 本" : "共 \(library.books.count) 本")
-                .font(.system(size: 16))
+                .font(.system(size: 14))
                 .foregroundStyle(BookXStyle.muted)
-        }
-        .padding(.bottom, 6)
+        }.padding(.bottom, 9)
     }
     @ViewBuilder private var shelfContent: some View {
         if let first = recent.first {
-            sectionTitle("最近阅读")
             Button { selected = first } label: {
                 HStack(alignment: .center, spacing: 17) {
                     BookCover(title: first.title, large: true).frame(width: 116)
@@ -289,17 +301,17 @@ struct RootView: View {
                         Text("已读 \(Int(first.progress * 100))%")
                             .font(.subheadline).foregroundStyle(BookXStyle.muted)
                         progressBar(first.progress)
-                        Text("继续阅读  ›")
+                        Text("继续")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(BookXStyle.purple)
-                            .padding(.horizontal, 16).padding(.vertical, 9)
-                            .background(BookXStyle.lilac.opacity(0.8), in: Capsule())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18).padding(.vertical, 9)
+                            .background(BookXStyle.purple, in: Capsule())
                     }
                     Spacer(minLength: 0)
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 26))
+                .background(BookXStyle.panel, in: RoundedRectangle(cornerRadius: 24))
                 .shadow(color: BookXStyle.purple.opacity(0.09), radius: 16, y: 7)
             }.buttonStyle(.plain).accessibilityIdentifier("continue-reading")
             if recent.count > 1 {
@@ -335,7 +347,7 @@ struct RootView: View {
                     .foregroundStyle(BookXStyle.purple)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 15).padding(.vertical, 7)
-                    .background(BookXStyle.lilac.opacity(0.65), in: Capsule())
+                    .background(BookXStyle.lilac.opacity(0.55), in: Capsule())
                 ForEach(sortedBooks.filter { initial($0.title) == letter }) { book in
                     Button { selected = book } label: {
                         HStack(spacing: 16) {
@@ -351,7 +363,7 @@ struct RootView: View {
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 22))
+                        .background(BookXStyle.panel, in: RoundedRectangle(cornerRadius: 18))
                         .shadow(color: BookXStyle.purple.opacity(0.08), radius: 12, y: 5)
                     }.buttonStyle(.plain)
                     .accessibilityIdentifier("library-book-" + book.title)
@@ -378,18 +390,18 @@ struct RootView: View {
     }
     private var bottomBar: some View {
         HStack(spacing: 9) {
-            tabButton("books.vertical.fill", "书架", index: 0)
+            tabButton("books.vertical", "书架", index: 0)
             Button { importer = true } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 32, weight: .light))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity).frame(height: 68)
-                    .background(BookXStyle.purple.gradient, in: Capsule())
+                    .background(BookXStyle.ink, in: Capsule())
             }.accessibilityLabel("导入书籍").disabled(library.importing)
-            tabButton("book", "书库", index: 1)
+            tabButton("line.3.horizontal", "书库", index: 1)
         }
         .padding(7)
-        .background(.white.opacity(0.9), in: Capsule())
+        .background(BookXStyle.paper, in: Capsule())
         .overlay(Capsule().stroke(BookXStyle.purple.opacity(0.13), lineWidth: 1))
         .shadow(color: BookXStyle.purple.opacity(0.13), radius: 15, y: 7)
         .padding(.horizontal, 22)
@@ -403,7 +415,7 @@ struct RootView: View {
             }
             .foregroundStyle(tab == index ? BookXStyle.purple : BookXStyle.ink)
             .frame(maxWidth: .infinity).frame(height: 68)
-            .background(tab == index ? BookXStyle.lilac.opacity(0.8) : .clear, in: Capsule())
+            .background(tab == index ? BookXStyle.lilac.opacity(0.75) : .clear, in: Capsule())
         }
         .accessibilityIdentifier(index == 0 ? "tab-shelf" : "tab-library")
     }
