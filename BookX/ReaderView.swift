@@ -11,6 +11,8 @@ struct ReaderView: View {
     @State private var errorMessage: String?
     @State private var loaded = false
     @State private var settings = false
+    @State private var menuVisible = false
+    @State private var showContents = false
     @State private var documentText: String?
 
     private var bg: Color {
@@ -44,6 +46,7 @@ struct ReaderView: View {
             } else if library.pageMode == 0 {
                 CurlPageView(pages: pages.map(\.text), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
+                    .simultaneousGesture(TapGesture().onEnded { withAnimation(.easeInOut(duration: 0.2)) { menuVisible.toggle() } })
             } else if library.pageMode == 1 {
                 TabView(selection: $currentPage) {
                     ForEach(pages.indices, id: \.self) { i in
@@ -90,6 +93,34 @@ struct ReaderView: View {
         .onChange(of: currentPage) { _, _ in savePosition() }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition() } }
         .onDisappear { savePosition() }
+        .overlay(alignment: .bottom) {
+            if loaded && menuVisible {
+                HStack(spacing: 26) {
+                    Button { showContents = true } label: {
+                        Label("目录", systemImage: "list.bullet").frame(maxWidth: .infinity)
+                    }
+                    Button { settings = true } label: {
+                        Label("排版", systemImage: "textformat.size").frame(maxWidth: .infinity)
+                    }
+                }
+                .font(.system(size: 16, weight: .medium))
+                .padding(18)
+                .foregroundStyle(ink)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .padding(.horizontal, 24)
+                .padding(.bottom, 56)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .sheet(isPresented: $showContents) {
+            NavigationStack {
+                ContentUnavailableView("暂无目录", systemImage: "list.bullet.rectangle", description: Text("当前版本暂未建立章节目录索引。"))
+                    .navigationTitle("目录")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showContents = false } } }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .sheet(isPresented: $settings) {
             SettingsView().environmentObject(library).presentationDetents([.medium, .large])
         }
