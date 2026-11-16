@@ -26,7 +26,8 @@ final class BookDocumentTests: XCTestCase {
         let book = try BookDocumentLoader.load(fixture("typography.epub"))
         XCTAssertTrue(book.text.contains("“春天”"))
         XCTAssertTrue(book.text.contains("—"))
-        XCTAssertTrue(book.text.contains("\u{00a0}"))
+        XCTAssertFalse(book.text.contains("\u{00a0}"))
+        XCTAssertTrue(book.text.contains(" "))
     }
     func testBrokenEPUBFailsInsteadOfImportingEmptyBook() {
         XCTAssertThrowsError(try BookDocumentLoader.load(fixture("broken.epub")))
