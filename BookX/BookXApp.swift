@@ -445,12 +445,7 @@ struct RootView: View {
         .padding(.bottom, 8)
     }
     @ViewBuilder private var glassBarBackground: some View {
-        if #available(iOS 26.0, *) {
-            Capsule().fill(.ultraThinMaterial)
-                .glassEffect(.regular, in: Capsule())
-        } else {
-            Capsule().fill(.ultraThinMaterial)
-        }
+        Capsule().fill(.ultraThinMaterial)
     }
     private func tabButton(_ symbol: String, _ title: String, index: Int) -> some View {
         Button {
