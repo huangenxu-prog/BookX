@@ -22,6 +22,7 @@ struct BookItem: Identifiable, Codable {
     var progress: Double
     var lastRead: Date?
     var readingOffset: Int?
+    var hiddenFromShelf: Bool?
 }
 
 @MainActor
@@ -121,12 +122,18 @@ final class BookLibrary: ObservableObject {
             save()
         } catch { importError = "删除失败：\(error.localizedDescription)" }
     }
+    func removeFromShelf(_ book: BookItem) {
+        guard let index = books.firstIndex(where: { $0.id == book.id }) else { return }
+        books[index].hiddenFromShelf = true
+        save()
+    }
     func fileURL(_ book: BookItem) -> URL { folder.appendingPathComponent(book.filename) }
     func updateProgress(_ id: UUID, _ value: Double, offset: Int) {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].progress = min(1, max(0, value))
         books[index].readingOffset = offset
         books[index].lastRead = Date()
+        books[index].hiddenFromShelf = false
         save()
     }
 }
@@ -197,8 +204,9 @@ struct RootView: View {
     @State private var settings = false
     @State private var selected: BookItem?
     @State private var pendingDeletion: BookItem?
+    @State private var pendingShelfRemoval: BookItem?
     private var recent: [BookItem] {
-        library.books.filter { $0.lastRead != nil }
+        library.books.filter { $0.lastRead != nil && $0.hiddenFromShelf != true }
             .sorted { ($0.lastRead ?? .distantPast) > ($1.lastRead ?? .distantPast) }
     }
     private var sortedBooks: [BookItem] {
@@ -237,6 +245,16 @@ struct RootView: View {
             if let book = pendingDeletion {
                 Button("删除《\(book.title)》", role: .destructive) { library.delete(book); pendingDeletion = nil }
             }
+        }
+        .confirmationDialog("移出书架？", isPresented: Binding(
+            get: { pendingShelfRemoval != nil },
+            set: { if !$0 { pendingShelfRemoval = nil } }
+        ), titleVisibility: .visible) {
+            if let book = pendingShelfRemoval {
+                Button("移出书架") { library.removeFromShelf(book); pendingShelfRemoval = nil }
+            }
+        } message: {
+            Text("书籍仍保留在书库，阅读进度不会丢失。")
         }
         .tint(BookXStyle.purple)
         .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data], allowsMultipleSelection: true) { result in
@@ -315,6 +333,9 @@ struct RootView: View {
                 .background(BookXStyle.panel, in: RoundedRectangle(cornerRadius: 24))
                 .shadow(color: BookXStyle.purple.opacity(0.09), radius: 16, y: 7)
             }.buttonStyle(.plain).accessibilityIdentifier("continue-reading")
+            .contextMenu {
+                Button("移出书架", systemImage: "books.vertical") { pendingShelfRemoval = first }
+            }
             if recent.count > 1 {
                 sectionTitle("更早读过").padding(.top, 4)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 20) {
@@ -328,6 +349,9 @@ struct RootView: View {
                                 progressBar(book.progress)
                             }.foregroundStyle(BookXStyle.ink)
                         }.buttonStyle(.plain)
+                        .contextMenu {
+                            Button("移出书架", systemImage: "books.vertical") { pendingShelfRemoval = book }
+                        }
                     }
                 }
             }
