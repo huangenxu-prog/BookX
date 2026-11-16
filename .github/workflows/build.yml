@@ -8,6 +8,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Test book parsing and reading positions
+        run: swift test
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project

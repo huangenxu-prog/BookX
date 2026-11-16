@@ -1,0 +1,5 @@
+.build/
+.swiftpm/
+BookX.xcodeproj/
+build.log
+.DS_Store

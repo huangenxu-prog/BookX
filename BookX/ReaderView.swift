@@ -1,14 +1,16 @@
 import SwiftUI
-import CoreFoundation
 
 struct ReaderView: View {
     let book: BookItem
     @EnvironmentObject private var library: BookLibrary
     @Environment(\.dismiss) private var dismiss
-    @State private var content = ""
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var pages: [ReadingPage] = []
     @State private var currentPage = 0
+    @State private var visiblePage: Int?
     @State private var errorMessage: String?
     @State private var loaded = false
+    @State private var settings = false
 
     private var bg: Color {
         switch library.paper {
@@ -20,39 +22,17 @@ struct ReaderView: View {
     }
     private var ink: Color { library.paper == 3 ? .white : .black }
 
-    // Page lengths are approximate; each page is scrollable to avoid clipping text.
-    private var pages: [String] {
-        guard !content.isEmpty else { return [""] }
-        let length = max(250, Int(800 * 19 / library.fontSize))
-        var result: [String] = []
-        var start = content.startIndex
-        while start < content.endIndex {
-            let target = content.index(start, offsetBy: length, limitedBy: content.endIndex) ?? content.endIndex
-            let segment = content[start..<target]
-            let end: String.Index
-            if target != content.endIndex,
-               let boundary = segment.lastIndex(where: { $0 == "\n" || $0 == "。" || $0 == "！" || $0 == "？" }),
-               content.distance(from: start, to: boundary) > length / 2 {
-                end = content.index(after: boundary)
-            } else {
-                end = target
-            }
-            result.append(String(content[start..<end]))
-            start = end
-        }
-        return result
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3) }
-                    .accessibilityLabel("返回书架")
+                Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
+                    .accessibilityLabel("返回")
                 Spacer()
                 Text(book.title).font(.subheadline).lineLimit(1)
                 Spacer()
-                Color.clear.frame(width: 24, height: 24)
-            }.padding()
+                Button { settings = true } label: { Image(systemName: "textformat.size").frame(width: 44, height: 44) }
+                    .accessibilityLabel("阅读设置")
+            }.padding(.horizontal)
 
             if let errorMessage {
                 ContentUnavailableView("无法阅读", systemImage: "exclamationmark.book.closed", description: Text(errorMessage))
@@ -62,36 +42,24 @@ struct ReaderView: View {
             } else if library.pageMode == 0 {
                 TabView(selection: $currentPage) {
                     ForEach(pages.indices, id: \.self) { i in
-                        ScrollView {
-                            Text(pages[i])
-                                .font(.system(size: library.fontSize))
-                                .lineSpacing(library.lineSpacing)
-                                .foregroundStyle(ink)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(24)
-                        }.tag(i)
+                        ScrollView { pageText(i).padding(.vertical, 20) }.tag(i)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(pages.indices, id: \.self) { i in
-                                Text(pages[i])
-                                    .font(.system(size: library.fontSize))
-                                    .lineSpacing(library.lineSpacing)
-                                    .foregroundStyle(ink)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 24)
-                                    .id(i)
-                            }
-                        }.padding(.vertical, 20)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(pages.indices, id: \.self) { i in
+                            pageText(i).id(i)
+                        }
                     }
-                    .onAppear { proxy.scrollTo(currentPage, anchor: .top) }
-                    .onChange(of: currentPage) { _, page in
-                        withAnimation { proxy.scrollTo(page, anchor: .top) }
-                    }
+                    .scrollTargetLayout()
+                    .padding(.vertical, 20)
+                }
+                .scrollPosition(id: $visiblePage, anchor: .top)
+                .onAppear { visiblePage = currentPage }
+                .onChange(of: visiblePage) { _, page in
+                    if let page, pages.indices.contains(page) { currentPage = page }
                 }
             }
 
@@ -99,49 +67,66 @@ struct ReaderView: View {
                 HStack {
                     Text("\(currentPage + 1) / \(pages.count)")
                     Spacer()
-                    Button { currentPage = max(0, currentPage - 1) } label: { Image(systemName: "chevron.left") }
-                        .disabled(currentPage == 0)
-                    Button { currentPage = min(pages.count - 1, currentPage + 1) } label: { Image(systemName: "chevron.right") }
-                        .disabled(currentPage >= pages.count - 1)
-                }.font(.caption).padding()
+                    Button { move(to: currentPage - 1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
+                        .disabled(currentPage == 0).accessibilityLabel("上一页")
+                    Button { move(to: currentPage + 1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
+                        .disabled(currentPage >= pages.count - 1).accessibilityLabel("下一页")
+                }.font(.caption).padding(.horizontal)
             }
         }
         .foregroundStyle(ink)
         .background(bg.ignoresSafeArea())
-        .onAppear { loadText() }
-        .onChange(of: currentPage) { _, page in
-            guard loaded, errorMessage == nil else { return }
-            library.updateProgress(book.id, Double(page) / Double(max(1, pages.count - 1)))
+        .task(id: library.fontSize) { await loadText() }
+        .onChange(of: currentPage) { _, _ in savePosition() }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition() } }
+        .onDisappear { savePosition() }
+        .sheet(isPresented: $settings) {
+            SettingsView().environmentObject(library).presentationDetents([.medium, .large])
         }
-        .onDisappear { library.save() }
     }
 
-    private func loadText() {
+    private func pageText(_ index: Int) -> some View {
+        Text(pages[index].text)
+            .font(.system(size: library.fontSize))
+            .lineSpacing(library.lineSpacing)
+            .foregroundStyle(ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+    }
+    private func move(to index: Int) {
+        let next = max(0, min(pages.count - 1, index))
+        if library.pageMode == 0 { currentPage = next } else { visiblePage = next; currentPage = next }
+    }
+    private func savePosition() {
+        guard loaded, errorMessage == nil, pages.indices.contains(currentPage) else { return }
+        library.updateProgress(book.id,
+            Double(currentPage) / Double(max(1, pages.count - 1)), offset: pages[currentPage].offset)
+    }
+    private func loadText() async {
+        savePosition()
+        loaded = false
+        errorMessage = nil
         let url = library.fileURL(book)
-        guard url.pathExtension.lowercased() == "txt" else {
-            errorMessage = "当前版本暂不支持 EPUB 正文阅读。"
-            return
+        let size = library.fontSize
+        do {
+            let result = try await Task.detached(priority: .userInitiated) {
+                let document = try BookDocumentLoader.load(url)
+                return BookPagination.pages(document.text, fontSize: size)
+            }.value
+            guard !Task.isCancelled else { return }
+            let saved = library.books.first(where: { $0.id == book.id }) ?? book
+            guard !result.isEmpty else { throw BookReadError.invalid("文件没有可阅读的正文。") }
+            pages = result
+            if let offset = saved.readingOffset {
+                currentPage = BookPagination.pageIndex(for: offset, in: pages)
+            } else {
+                currentPage = min(pages.count - 1, max(0, Int(saved.progress * Double(max(1, pages.count - 1)))))
+            }
+            loaded = true
+            savePosition()
+        } catch {
+            guard !Task.isCancelled else { return }
+            errorMessage = error.localizedDescription
         }
-        if let text = try? String(contentsOf: url, encoding: .utf8) {
-            content = text
-        } else if let text = try? String(contentsOf: url, encoding: .utf16) {
-            content = text
-        } else if let text = try? String(contentsOf: url, encoding: .gb_18030_2000) {
-            content = text
-        } else {
-            errorMessage = "无法识别 TXT 文件编码。"
-            return
-        }
-        guard !content.isEmpty else {
-            errorMessage = "文件没有可阅读的正文。"
-            return
-        }
-        currentPage = min(pages.count - 1, max(0, Int(book.progress * Double(max(1, pages.count - 1)))))
-        loaded = true
-        library.updateProgress(book.id, Double(currentPage) / Double(max(1, pages.count - 1)))
     }
-}
-
-private extension String.Encoding {
-    static let gb_18030_2000 = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
 }

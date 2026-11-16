@@ -20,11 +20,14 @@ struct BookItem: Identifiable, Codable {
     var filename: String
     var progress: Double
     var lastRead: Date?
+    var readingOffset: Int?
 }
 
 @MainActor
 final class BookLibrary: ObservableObject {
     @Published var books: [BookItem] = []
+    @Published var importError: String?
+    @Published var importing = false
     @Published var fontSize: Double = 19
     @Published var lineSpacing: Double = 8
     @Published var paper: Int = 1
@@ -37,7 +40,7 @@ final class BookLibrary: ObservableObject {
            let items = try? JSONDecoder().decode([BookItem].self, from: data) { books = items }
         fontSize = UserDefaults.standard.double(forKey: "fontSize") == 0 ? 19 : UserDefaults.standard.double(forKey: "fontSize")
         lineSpacing = UserDefaults.standard.object(forKey: "lineSpacing") == nil ? 8 : UserDefaults.standard.double(forKey: "lineSpacing")
-        paper = UserDefaults.standard.integer(forKey: "paper")
+        paper = UserDefaults.standard.object(forKey: "paper") == nil ? 1 : UserDefaults.standard.integer(forKey: "paper")
         pageMode = UserDefaults.standard.integer(forKey: "pageMode")
     }
     func save() {
@@ -49,7 +52,11 @@ final class BookLibrary: ObservableObject {
         UserDefaults.standard.set(paper, forKey: "paper")
         UserDefaults.standard.set(pageMode, forKey: "pageMode")
     }
-    func importFiles(_ urls: [URL]) {
+    func importFiles(_ urls: [URL]) async {
+        guard !importing else { return }
+        importing = true
+        defer { importing = false }
+        var failures: [String] = []
         for url in urls {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
@@ -57,15 +64,28 @@ final class BookLibrary: ObservableObject {
             let name = UUID().uuidString + "." + url.pathExtension.lowercased()
             do {
                 try fm.copyItem(at: url, to: folder.appendingPathComponent(name))
-                books.append(BookItem(id: UUID(), title: url.deletingPathExtension().lastPathComponent, author: "", filename: name, progress: 0, lastRead: nil))
-            } catch { print("Book import failed: \(error)") }
+                let localURL = folder.appendingPathComponent(name)
+                do {
+                    let document = try await Task.detached(priority: .userInitiated) {
+                        try BookDocumentLoader.load(localURL)
+                    }.value
+                    books.append(BookItem(id: UUID(),
+                        title: document.title.isEmpty ? url.deletingPathExtension().lastPathComponent : document.title,
+                        author: document.author, filename: name, progress: 0, lastRead: nil))
+                } catch {
+                    try? fm.removeItem(at: localURL)
+                    throw error
+                }
+            } catch { failures.append("\(url.lastPathComponent)：\(error.localizedDescription)") }
         }
         save()
+        if !failures.isEmpty { importError = failures.joined(separator: "\n") }
     }
     func fileURL(_ book: BookItem) -> URL { folder.appendingPathComponent(book.filename) }
-    func updateProgress(_ id: UUID, _ value: Double) {
+    func updateProgress(_ id: UUID, _ value: Double, offset: Int) {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
-        books[index].progress = value
+        books[index].progress = min(1, max(0, value))
+        books[index].readingOffset = offset
         books[index].lastRead = Date()
         save()
     }
@@ -156,8 +176,20 @@ struct RootView: View {
         }
         .tint(BookXStyle.purple)
         .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result { library.importFiles(urls) }
+            switch result {
+            case .success(let urls): Task { await library.importFiles(urls) }
+            case .failure(let error): library.importError = error.localizedDescription
+            }
         }
+        .overlay {
+            if library.importing {
+                ProgressView("正在导入书籍")
+                    .padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+            }
+        }
+        .alert("导入未完成", isPresented: Binding(get: { library.importError != nil }, set: { if !$0 { library.importError = nil } })) {
+            Button("知道了", role: .cancel) { library.importError = nil }
+        } message: { Text(library.importError ?? "") }
         .sheet(isPresented: $settings) {
             SettingsView().environmentObject(library).presentationDetents([.medium, .large])
         }
@@ -299,7 +331,7 @@ struct RootView: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity).frame(height: 68)
                     .background(BookXStyle.purple.gradient, in: Capsule())
-            }.accessibilityLabel("导入书籍")
+            }.accessibilityLabel("导入书籍").disabled(library.importing)
             tabButton("book.open", "书库", index: 1)
         }
         .padding(7)
