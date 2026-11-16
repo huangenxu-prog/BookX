@@ -14,6 +14,8 @@ struct ReaderView: View {
     @State private var menuVisible = false
     @State private var showContents = false
     @State private var documentText: String?
+    @StateObject private var speech = BookSpeech()
+    @State private var listening = false
 
     private var bg: Color {
         switch library.paper {
@@ -93,9 +95,23 @@ struct ReaderView: View {
         .background(bg.ignoresSafeArea())
         .preferredColorScheme(library.paper == 3 ? .dark : .light)
         .task(id: library.fontSize) { await loadText() }
-        .onChange(of: currentPage) { _, _ in savePosition() }
+        .onChange(of: currentPage) { _, _ in
+            savePosition()
+            if listening && pages.indices.contains(currentPage) {
+                speech.play(pages[currentPage].text, page: currentPage)
+            }
+        }
+        .onChange(of: speech.finishedPage) { _, page in
+            guard listening, let page, page == currentPage else { return }
+            if pages.indices.contains(page + 1) {
+                move(to: page + 1)
+            } else {
+                listening = false
+                speech.stop()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition() } }
-        .onDisappear { savePosition() }
+        .onDisappear { savePosition(); speech.stop(); listening = false }
         .overlay(alignment: .top) {
             if loaded && library.pageMode == 0 {
                 HStack {
@@ -125,6 +141,9 @@ struct ReaderView: View {
                     Button { settings = true } label: {
                         Label("排版", systemImage: "textformat.size").frame(maxWidth: .infinity)
                     }
+                    Button { toggleListening() } label: {
+                        Label(listening ? "停止听书" : "听书", systemImage: listening ? "stop.fill" : "headphones").frame(maxWidth: .infinity)
+                    }
                 }
                 .font(.system(size: 16, weight: .medium))
                 .padding(18)
@@ -133,6 +152,27 @@ struct ReaderView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 56)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if listening && loaded {
+                HStack(spacing: 16) {
+                    Image(systemName: "headphones")
+                    Text("正在听书").font(.subheadline)
+                    Spacer()
+                    Button { speech.togglePause() } label: {
+                        Image(systemName: speech.isPaused ? "play.fill" : "pause.fill")
+                            .frame(width: 44, height: 44)
+                    }.accessibilityLabel(speech.isPaused ? "继续朗读" : "暂停朗读")
+                    Button { speech.stop(); listening = false } label: {
+                        Image(systemName: "stop.fill").frame(width: 44, height: 44)
+                    }.accessibilityLabel("停止听书")
+                }
+                .padding(.horizontal, 20)
+                .foregroundStyle(ink)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.horizontal, 20)
+                .padding(.bottom, 112)
             }
         }
         .sheet(isPresented: $showContents) {
@@ -146,6 +186,17 @@ struct ReaderView: View {
         }
         .sheet(isPresented: $settings) {
             SettingsView().environmentObject(library).presentationDetents([.medium, .large])
+        }
+    }
+
+    private func toggleListening() {
+        if listening {
+            speech.stop()
+            listening = false
+        } else if loaded && pages.indices.contains(currentPage) {
+            listening = true
+            menuVisible = false
+            speech.play(pages[currentPage].text, page: currentPage)
         }
     }
 
@@ -168,6 +219,8 @@ struct ReaderView: View {
             Double(currentPage) / Double(max(1, pages.count - 1)), offset: pages[currentPage].offset)
     }
     private func loadText() async {
+        speech.stop()
+        listening = false
         savePosition()
         loaded = false
         errorMessage = nil
