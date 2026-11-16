@@ -129,9 +129,8 @@ struct RootView: View {
     }
     private func initial(_ title: String) -> String {
         guard let first = title.first else { return "#" }
-        let mutable = NSMutableString(string: String(first))
-        CFStringTransform(mutable, nil, kCFStringTransformToLatin, false)
-        let latin = (mutable as String).folding(options: .diacriticInsensitive, locale: Locale(identifier: "zh_CN"))
+        let latin = (String(first).applyingTransform(.toLatin, reverse: false) ?? String(first))
+            .folding(options: .diacriticInsensitive, locale: Locale(identifier: "zh_CN"))
         let letter = latin.prefix(1).uppercased()
         return letter.range(of: "^[A-Z]$", options: .regularExpression) == nil ? "#" : letter
     }
