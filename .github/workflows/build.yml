@@ -16,6 +16,10 @@ jobs:
         run: swift test
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Prepare app icon
+        run: |
+          sips -z 1024 1024 BookX/Assets.xcassets/AppIcon.appiconset/icon-source.png --out BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+          sips -g pixelWidth -g pixelHeight BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
       - name: Generate project
         run: xcodegen generate
       - name: Choose iPhone simulator
