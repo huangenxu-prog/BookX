@@ -37,10 +37,11 @@ enum BookDocumentLoader {
     }
 
     private static func normalizeReadingText(_ source: String) -> String {
-        var text = source.replacingOccurrences(of: "\\r\\n?", with: "\\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: "[\\u{00A0}\\u{2002}\\u{2003}\\u{3000}\\t]+", with: " ", options: .regularExpression)
-        text = text.replacingOccurrences(of: "[ ]*\\n[ ]*", with: "\\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: "\\n{3,}", with: "\\n\\n", options: .regularExpression)
+        var text = source.replacingOccurrences(of: "\r\n", with: "\n")
+        text = text.replacingOccurrences(of: "\r", with: "\n")
+        text = text.replacingOccurrences(of: "[\\x{00A0}\\x{2002}\\x{2003}\\x{3000}\\t]+", with: " ", options: .regularExpression)
+        text = text.replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
