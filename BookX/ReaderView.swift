@@ -41,6 +41,8 @@ struct ReaderView: View {
             } else if !loaded {
                 ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if library.pageMode == 0 {
+                CurlPageView(pages: pages.map(\.text), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
+            } else if library.pageMode == 1 || library.pageMode == 2 {
                 TabView(selection: $currentPage) {
                     ForEach(pages.indices, id: \.self) { i in
                         ScrollView { pageText(i).padding(.vertical, 20) }.tag(i)
@@ -97,7 +99,8 @@ struct ReaderView: View {
     }
     private func move(to index: Int) {
         let next = max(0, min(pages.count - 1, index))
-        if library.pageMode == 0 { currentPage = next } else { visiblePage = next; currentPage = next }
+        if library.pageMode == 3 { visiblePage = next }
+        currentPage = next
     }
     private func savePosition() {
         guard loaded, errorMessage == nil, pages.indices.contains(currentPage) else { return }
