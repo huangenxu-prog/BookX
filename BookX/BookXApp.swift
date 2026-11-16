@@ -424,22 +424,87 @@ struct RootView: View {
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: BookLibrary
+    private let accent = Color(red: 0.72, green: 0.25, blue: 0.19)
+    private let paper = Color(red: 0.985, green: 0.971, blue: 0.942)
+    private let ink = Color(red: 0.15, green: 0.14, blue: 0.12)
+    private let backgrounds: [(String, Color)] = [
+        ("白色", .white),
+        ("米黄", Color(red: 0.97, green: 0.93, blue: 0.85)),
+        ("护眼绿", Color(red: 0.86, green: 0.92, blue: 0.85)),
+        ("深色", Color(red: 0.13, green: 0.13, blue: 0.13))
+    ]
     var body: some View {
         NavigationStack {
-            Form {
-                Section("翻页方式") {
-                    Picker("翻页", selection: $library.pageMode) {
-                        Text("左右翻页").tag(0)
-                        Text("上下滚动").tag(1)
-                    }.pickerStyle(.segmented).accessibilityIdentifier("page-mode-picker")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("字号").font(.headline)
+                            Spacer()
+                            Text("\(Int(library.fontSize))").monospacedDigit().foregroundStyle(accent)
+                        }
+                        Slider(value: $library.fontSize, in: 14...30, step: 1).tint(accent)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("行距").font(.headline)
+                            Spacer()
+                            Text(String(format: "%.1f", library.lineSpacing / 10 + 1))
+                                .monospacedDigit().foregroundStyle(accent)
+                        }
+                        Slider(value: $library.lineSpacing, in: 2...20, step: 1).tint(accent)
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("背景").font(.headline)
+                        HStack(spacing: 16) {
+                            ForEach(backgrounds.indices, id: \.self) { index in
+                                Button { library.paper = index } label: {
+                                    VStack(spacing: 7) {
+                                        Circle()
+                                            .fill(backgrounds[index].1)
+                                            .frame(width: 49, height: 49)
+                                            .overlay(Circle().stroke(library.paper == index ? accent : ink.opacity(0.12), lineWidth: library.paper == index ? 2.5 : 1))
+                                            .overlay {
+                                                if library.paper == index {
+                                                    Image(systemName: "checkmark").font(.caption.bold())
+                                                        .foregroundStyle(index == 3 ? .white : accent)
+                                                }
+                                            }
+                                        Text(backgrounds[index].0).font(.caption).foregroundStyle(ink)
+                                    }
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("翻页").font(.headline)
+                        Picker("翻页", selection: $library.pageMode) {
+                            Text("左右翻页").tag(0)
+                            Text("上下滚动").tag(1)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier("page-mode-picker")
+                    }
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("阅读预览").font(.caption).foregroundStyle(.secondary)
+                        Text("知是行之始，行是知之成。")
+                            .font(.system(size: library.fontSize, design: .serif))
+                            .lineSpacing(library.lineSpacing)
+                            .foregroundStyle(library.paper == 3 ? Color.white : ink)
+                            .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                            .background(backgrounds[library.paper].1, in: RoundedRectangle(cornerRadius: 16))
+                        Text("轻点左右翻页").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
-                Section("字体大小") { Slider(value: $library.fontSize, in: 14...30, step: 1); Text("\(Int(library.fontSize)) pt") }
-                Section("段落行距") { Slider(value: $library.lineSpacing, in: 2...20, step: 1) }
-                Section("阅读背景") { Picker("背景", selection: $library.paper) { Text("白色").tag(0); Text("米黄").tag(1); Text("护眼绿").tag(2); Text("深色").tag(3) } }
-
+                .padding(24)
             }
-            .navigationTitle("阅读设置").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { library.save(); dismiss() } } }
+            .background(paper.ignoresSafeArea())
+            .foregroundStyle(ink)
+            .navigationTitle("阅读设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) {
+                Button("完成") { library.save(); dismiss() }.tint(accent)
+            } }
             .onDisappear { library.save() }
         }
     }
