@@ -70,7 +70,7 @@ final class BookLibrary: ObservableObject {
         fontSize = UserDefaults.standard.double(forKey: "fontSize") == 0 ? 19 : UserDefaults.standard.double(forKey: "fontSize")
         lineSpacing = UserDefaults.standard.object(forKey: "lineSpacing") == nil ? 8 : UserDefaults.standard.double(forKey: "lineSpacing")
         paper = UserDefaults.standard.object(forKey: "paper") == nil ? 1 : UserDefaults.standard.integer(forKey: "paper")
-        pageMode = UserDefaults.standard.integer(forKey: "pageMode")
+        pageMode = UserDefaults.standard.object(forKey: "pageMode") == nil ? 0 : UserDefaults.standard.integer(forKey: "pageMode")
     }
     func save() {
         do {
@@ -479,8 +479,10 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("翻页").font(.headline)
                         Picker("翻页", selection: $library.pageMode) {
-                            Text("左右翻页").tag(0)
-                            Text("上下滚动").tag(1)
+                            Text("仿真翻页").tag(0)
+                            Text("左右滑动").tag(1)
+                            Text("覆盖翻页").tag(2)
+                            Text("上下滚动").tag(3)
                         }
                         .pickerStyle(.segmented)
                         .accessibilityIdentifier("page-mode-picker")
@@ -493,7 +495,7 @@ struct SettingsView: View {
                             .foregroundStyle(library.paper == 3 ? Color.white : ink)
                             .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
                             .background(backgrounds[library.paper].1, in: RoundedRectangle(cornerRadius: 16))
-                        Text("轻点左右翻页").font(.caption).foregroundStyle(.secondary)
+                        Text("可在阅读时切换翻页方式").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .padding(24)
