@@ -13,6 +13,26 @@ targets:
     sources: [BookX]
     dependencies:
       - package: ZIPFoundation
+    info:
+      path: build/Info.plist
+      properties:
+        CFBundleDisplayName: BookX
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.plain-text, org.idpf.epub-container]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.idpf.epub-container
+            UTTypeDescription: EPUB book
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [epub]
+              public.mime-type: application/epub+zip
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.huangenxu.BookX
@@ -22,3 +42,27 @@ targets:
         SWIFT_VERSION: 5.9
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGNING_ALLOWED: NO
+  BookXUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - UITests
+      - path: Tests/Fixtures/ordered.epub
+        buildPhase: resources
+    dependencies:
+      - target: BookX
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.huangenxu.BookX.UITests
+        TEST_TARGET_NAME: BookX
+        SWIFT_VERSION: 5.9
+        CODE_SIGNING_ALLOWED: NO
+schemes:
+  BookX:
+    build:
+      targets:
+        BookX: all
+    test:
+      targets: [BookXUITests]

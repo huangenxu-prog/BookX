@@ -14,7 +14,9 @@
 
 macOS 上运行 `swift test` 验证编码、EPUB 顺序/元数据和分页位置；运行 `xcodegen generate` 生成 Xcode 工程。打开工程后选择 iPhone 模拟器运行，最低 iOS 17。
 
-GitHub Actions 自动运行核心测试及 iOS 模拟器编译，不生成安装包。
+GitHub Actions 自动运行核心测试及 iPhone 模拟器 UI 测试。测试通过后构建 arm64 真机版本，输出 `BookX-1.0-unsigned.ipa`（需自行签名安装）。UI 测试覆盖 TXT / EPUB 导入读取、翻页、滚动和退出重进后的续读；不等同于真机验证。
+
+支持系统文件选择器多选导入，也可通过其他 App 的“打开方式”交给 BookX。书库长按书籍可删除正文与阅读记录。
 
 ## 依赖
 

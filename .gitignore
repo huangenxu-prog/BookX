@@ -3,3 +3,10 @@
 BookX.xcodeproj/
 build.log
 .DS_Store
+build/
+DeviceBuild/
+package/
+*.ipa
+*.xcresult/
+simulator.log
+screenshots/

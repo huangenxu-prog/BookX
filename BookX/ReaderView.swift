@@ -11,6 +11,7 @@ struct ReaderView: View {
     @State private var errorMessage: String?
     @State private var loaded = false
     @State private var settings = false
+    @State private var documentText: String?
 
     private var bg: Color {
         switch library.paper {
@@ -65,7 +66,7 @@ struct ReaderView: View {
 
             if loaded && errorMessage == nil {
                 HStack {
-                    Text("\(currentPage + 1) / \(pages.count)")
+                    Text("\(currentPage + 1) / \(pages.count)").accessibilityIdentifier("reading-position")
                     Spacer()
                     Button { move(to: currentPage - 1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
                         .disabled(currentPage == 0).accessibilityLabel("上一页")
@@ -109,13 +110,15 @@ struct ReaderView: View {
         let url = library.fileURL(book)
         let size = library.fontSize
         do {
-            let result = try await Task.detached(priority: .userInitiated) {
-                let document = try BookDocumentLoader.load(url)
-                return BookPagination.pages(document.text, fontSize: size)
+            let cached = documentText
+            let (text, result) = try await Task.detached(priority: .userInitiated) {
+                let text = try cached ?? BookDocumentLoader.load(url).text
+                return (text, BookPagination.pages(text, fontSize: size))
             }.value
             guard !Task.isCancelled else { return }
             let saved = library.books.first(where: { $0.id == book.id }) ?? book
             guard !result.isEmpty else { throw BookReadError.invalid("文件没有可阅读的正文。") }
+            documentText = text
             pages = result
             if let offset = saved.readingOffset {
                 currentPage = BookPagination.pageIndex(for: offset, in: pages)

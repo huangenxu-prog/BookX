@@ -9,6 +9,7 @@ struct BookXApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(library)
+                .onOpenURL { url in Task { await library.importFiles([url]) } }
         }
     }
 }
@@ -34,7 +35,35 @@ final class BookLibrary: ObservableObject {
     @Published var pageMode: Int = 0
     private let fm = FileManager.default
     private var folder: URL { fm.urls(for: .documentDirectory, in: .userDomainMask)[0] }
-    init() { load() }
+    init() {
+        load()
+        #if DEBUG
+        prepareUITest()
+        #endif
+    }
+    #if DEBUG
+    private func prepareUITest() {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["BOOKX_UI_TEST_RESET"] == "1" else { return }
+        // Only a DEBUG UI-test launch may clear its own app sandbox.
+        for book in books { try? fm.removeItem(at: fileURL(book)) }
+        books = []
+        fontSize = 19; lineSpacing = 8; paper = 1; pageMode = 0
+        save()
+        let temporary = fm.temporaryDirectory.appendingPathComponent("BookX-UI", isDirectory: true)
+        try? fm.createDirectory(at: temporary, withIntermediateDirectories: true)
+        let textURL = temporary.appendingPathComponent("阅读测试.txt")
+        let text = (1...160).map { "第\($0)段：清晨，阳光落在书页上。继续读下去，每一段文字都应该完整保留。\n" }.joined()
+        try? text.write(to: textURL, atomically: true, encoding: .utf8)
+        var urls = [textURL]
+        if let encoded = environment["BOOKX_UI_TEST_EPUB"], let data = Data(base64Encoded: encoded) {
+            let url = temporary.appendingPathComponent("sample.epub")
+            try? data.write(to: url)
+            urls.append(url)
+        }
+        Task { await importFiles(urls) }
+    }
+    #endif
     func load() {
         if let data = try? Data(contentsOf: folder.appendingPathComponent("library.json")),
            let items = try? JSONDecoder().decode([BookItem].self, from: data) { books = items }
@@ -44,8 +73,11 @@ final class BookLibrary: ObservableObject {
         pageMode = UserDefaults.standard.integer(forKey: "pageMode")
     }
     func save() {
-        if let data = try? JSONEncoder().encode(books) {
-            try? data.write(to: folder.appendingPathComponent("library.json"), options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(books)
+            try data.write(to: folder.appendingPathComponent("library.json"), options: .atomic)
+        } catch {
+            importError = "无法保存书库或阅读进度：\(error.localizedDescription)"
         }
         UserDefaults.standard.set(fontSize, forKey: "fontSize")
         UserDefaults.standard.set(lineSpacing, forKey: "lineSpacing")
@@ -80,6 +112,14 @@ final class BookLibrary: ObservableObject {
         }
         save()
         if !failures.isEmpty { importError = failures.joined(separator: "\n") }
+    }
+    func delete(_ book: BookItem) {
+        do {
+            let url = fileURL(book)
+            if fm.fileExists(atPath: url.path) { try fm.removeItem(at: url) }
+            books.removeAll { $0.id == book.id }
+            save()
+        } catch { importError = "删除失败：\(error.localizedDescription)" }
     }
     func fileURL(_ book: BookItem) -> URL { folder.appendingPathComponent(book.filename) }
     func updateProgress(_ id: UUID, _ value: Double, offset: Int) {
@@ -138,6 +178,7 @@ struct RootView: View {
     @State private var importer = false
     @State private var settings = false
     @State private var selected: BookItem?
+    @State private var pendingDeletion: BookItem?
     private var recent: [BookItem] {
         library.books.filter { $0.lastRead != nil }
             .sorted { ($0.lastRead ?? .distantPast) > ($1.lastRead ?? .distantPast) }
@@ -174,6 +215,15 @@ struct RootView: View {
                 bottomBar
             }
         }
+        .preferredColorScheme(.light)
+        .onChange(of: library.books.count) { old, new in if new > old { tab = 1 } }
+        .confirmationDialog("删除这本书及阅读记录？", isPresented: Binding(
+            get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }
+        ), titleVisibility: .visible) {
+            if let book = pendingDeletion {
+                Button("删除《\(book.title)》", role: .destructive) { library.delete(book); pendingDeletion = nil }
+            }
+        }
         .tint(BookXStyle.purple)
         .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data], allowsMultipleSelection: true) { result in
             switch result {
@@ -187,7 +237,7 @@ struct RootView: View {
                     .padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
             }
         }
-        .alert("导入未完成", isPresented: Binding(get: { library.importError != nil }, set: { if !$0 { library.importError = nil } })) {
+        .alert("提示", isPresented: Binding(get: { library.importError != nil }, set: { if !$0 { library.importError = nil } })) {
             Button("知道了", role: .cancel) { library.importError = nil }
         } message: { Text(library.importError ?? "") }
         .sheet(isPresented: $settings) {
@@ -251,7 +301,7 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 26))
                 .shadow(color: BookXStyle.purple.opacity(0.09), radius: 16, y: 7)
-            }.buttonStyle(.plain)
+            }.buttonStyle(.plain).accessibilityIdentifier("continue-reading")
             if recent.count > 1 {
                 sectionTitle("更早读过").padding(.top, 4)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 20) {
@@ -304,6 +354,10 @@ struct RootView: View {
                         .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 22))
                         .shadow(color: BookXStyle.purple.opacity(0.08), radius: 12, y: 5)
                     }.buttonStyle(.plain)
+                    .accessibilityIdentifier("library-book-" + book.title)
+                    .contextMenu {
+                        Button("删除书籍", role: .destructive) { pendingDeletion = book }
+                    }
                 }
             }
         }
@@ -351,10 +405,12 @@ struct RootView: View {
             .frame(maxWidth: .infinity).frame(height: 68)
             .background(tab == index ? BookXStyle.lilac.opacity(0.8) : .clear, in: Capsule())
         }
+        .accessibilityIdentifier(index == 0 ? "tab-shelf" : "tab-library")
     }
 }
 
 struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: BookLibrary
     var body: some View {
         NavigationStack {
@@ -362,9 +418,10 @@ struct SettingsView: View {
                 Section("字体大小") { Slider(value: $library.fontSize, in: 14...30, step: 1); Text("\(Int(library.fontSize)) pt") }
                 Section("段落行距") { Slider(value: $library.lineSpacing, in: 2...20, step: 1) }
                 Section("阅读背景") { Picker("背景", selection: $library.paper) { Text("白色").tag(0); Text("米黄").tag(1); Text("护眼绿").tag(2); Text("深色").tag(3) } }
-                Section("翻页方式") { Picker("翻页", selection: $library.pageMode) { Text("左右翻页").tag(0); Text("上下滚动").tag(1) } }
+                Section("翻页方式") { Picker("翻页", selection: $library.pageMode) { Text("左右翻页").tag(0); Text("上下滚动").tag(1) }.accessibilityIdentifier("page-mode-picker") }
             }
             .navigationTitle("阅读设置").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { library.save(); dismiss() } } }
             .onDisappear { library.save() }
         }
     }
