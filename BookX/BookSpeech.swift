@@ -10,6 +10,7 @@ final class BookSpeech: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
     @Published var rate: Float = 0.50
     private let synthesizer = AVSpeechSynthesizer()
     private var activePage: Int?
+    private var activeUtterance: AVSpeechUtterance?
     private var stopped = false
 
     override init() {
@@ -33,6 +34,7 @@ final class BookSpeech: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
         utterance.rate = rate
+        activeUtterance = utterance
         synthesizer.speak(utterance)
         isSpeaking = true
         isPaused = false
@@ -49,6 +51,7 @@ final class BookSpeech: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
     func stop() {
         stopped = true
         activePage = nil
+        activeUtterance = nil
         finishedPage = nil
         synthesizer.stopSpeaking(at: .immediate)
         isSpeaking = false
@@ -57,17 +60,20 @@ final class BookSpeech: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in
-            guard !self.stopped, let page = self.activePage else { return }
+            guard !self.stopped, self.activeUtterance === utterance, let page = self.activePage else { return }
             self.isSpeaking = false
             self.isPaused = false
             self.activePage = nil
+            self.activeUtterance = nil
             self.finishedPage = page
         }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         Task { @MainActor in
-            if self.activePage == nil {
+            if self.activeUtterance === utterance {
+                self.activeUtterance = nil
+                self.activePage = nil
                 self.isSpeaking = false
                 self.isPaused = false
             }
