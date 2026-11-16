@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import CoreFoundation
 
 @main
 struct BookXApp: App {
@@ -70,82 +71,254 @@ final class BookLibrary: ObservableObject {
     }
 }
 
+private enum BookXStyle {
+    static let purple = Color(red: 0.43, green: 0.16, blue: 0.60)
+    static let lilac = Color(red: 0.91, green: 0.83, blue: 0.98)
+    static let ink = Color(red: 0.16, green: 0.11, blue: 0.23)
+    static let muted = Color(red: 0.48, green: 0.43, blue: 0.55)
+}
+
+private struct BookCover: View {
+    let title: String
+    let large: Bool
+    private var palette: [Color] {
+        let palettes: [[Color]] = [
+            [Color(red: 0.79, green: 0.88, blue: 0.81), Color(red: 0.91, green: 0.96, blue: 0.90)],
+            [Color(red: 0.95, green: 0.83, blue: 0.68), Color(red: 0.99, green: 0.94, blue: 0.85)],
+            [Color(red: 0.79, green: 0.85, blue: 0.95), Color(red: 0.93, green: 0.95, blue: 0.99)],
+            [Color(red: 0.91, green: 0.86, blue: 0.72), Color(red: 0.98, green: 0.95, blue: 0.85)]
+        ]
+        let index = title.unicodeScalars.reduce(0) { $0 + Int($1.value) } % palettes.count
+        return palettes[index]
+    }
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 11)
+                .fill(LinearGradient(colors: palette, startPoint: .topLeading, endPoint: .bottomTrailing))
+            RoundedRectangle(cornerRadius: 7)
+                .stroke(BookXStyle.ink.opacity(0.18), lineWidth: 1)
+                .padding(9)
+            Text(title)
+                .font(.system(size: large ? 23 : 15, weight: .semibold, design: .serif))
+                .foregroundStyle(BookXStyle.ink)
+                .multilineTextAlignment(.center)
+                .lineLimit(4)
+                .minimumScaleFactor(0.6)
+                .padding(15)
+        }
+        .aspectRatio(0.69, contentMode: .fit)
+        .shadow(color: BookXStyle.purple.opacity(0.10), radius: 8, y: 5)
+        .accessibilityLabel("封面：\(title)")
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var library: BookLibrary
     @State private var tab = 0
     @State private var importer = false
     @State private var settings = false
     @State private var selected: BookItem?
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(tab == 0 ? "书架" : "书库").font(.system(size: 32, weight: .bold))
-                Spacer()
-                if tab == 0 {
-                    Button { settings = true } label: {
-                        Image(systemName: "slider.horizontal.3").font(.title3)
-                            .frame(width: 48, height: 48).background(Color(.secondarySystemBackground), in: Circle())
-                    }.tint(.primary)
-                }
-            }.padding(.horizontal, 24).padding(.top, 20)
-            ScrollView {
-                if tab == 0 {
-                    let recent = library.books.filter { $0.lastRead != nil }.sorted { ($0.lastRead ?? .distantPast) > ($1.lastRead ?? .distantPast) }
-                    if recent.isEmpty {
-                        ContentUnavailableView("还没有阅读记录", systemImage: "books.vertical", description: Text("点击下方 + 导入书籍，从书库开始阅读"))
-                            .padding(.top, 80)
-                    } else {
-                        LazyVStack(spacing: 0) { ForEach(recent) { book in bookRow(book, showProgress: true) } }
-                    }
-                } else {
-                    let sorted = library.books.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-                    if sorted.isEmpty {
-                        ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入 TXT 或 EPUB"))
-                            .padding(.top, 80)
-                    } else {
-                        LazyVStack(spacing: 0) { ForEach(sorted) { book in bookRow(book, showProgress: false) } }
-                    }
-                }
-            }.padding(.horizontal, 24)
-            HStack(spacing: 10) {
-                tabButton("books.vertical.fill", "书架", index: 0)
-                Button { importer = true } label: {
-                    Image(systemName: "plus").font(.system(size: 34, weight: .light))
-                        .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 76)
-                        .background(Color(red: 0.07, green: 0.07, blue: 0.09), in: Capsule())
-                }
-                tabButton("book.closed", "书库", index: 1)
-            }
-            .padding(8).background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().stroke(.gray.opacity(0.25), lineWidth: 0.7))
-            .padding(.horizontal, 22).padding(.bottom, 8)
+    private var recent: [BookItem] {
+        library.books.filter { $0.lastRead != nil }
+            .sorted { ($0.lastRead ?? .distantPast) > ($1.lastRead ?? .distantPast) }
+    }
+    private var sortedBooks: [BookItem] {
+        library.books.sorted {
+            $0.title.compare($1.title, options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "zh_CN")) == .orderedAscending
         }
-        .background(Color(.systemBackground))
+    }
+    private func initial(_ title: String) -> String {
+        guard let first = title.first else { return "#" }
+        let mutable = NSMutableString(string: String(first))
+        CFStringTransform(mutable, nil, kCFStringTransformToLatin, false)
+        let latin = (mutable as String).folding(options: .diacriticInsensitive, locale: Locale(identifier: "zh_CN"))
+        let letter = latin.prefix(1).uppercased()
+        return letter.range(of: "^[A-Z]$", options: .regularExpression) == nil ? "#" : letter
+    }
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [
+                Color(red: 0.92, green: 0.82, blue: 0.97),
+                Color(red: 0.97, green: 0.94, blue: 1.0),
+                Color(red: 0.99, green: 0.97, blue: 1.0)
+            ], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header
+                        if tab == 0 { shelfContent } else { libraryContent }
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 18)
+                    .padding(.bottom, 28)
+                }
+                bottomBar
+            }
+        }
+        .tint(BookXStyle.purple)
         .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { library.importFiles(urls) }
         }
-        .sheet(isPresented: $settings) { SettingsView().environmentObject(library).presentationDetents([.medium, .large]) }
-        .fullScreenCover(item: $selected) { book in ReaderView(book: book).environmentObject(library) }
-    }
-    func tabButton(_ symbol: String, _ title: String, index: Int) -> some View {
-        Button { tab = index } label: {
-            VStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 27))
-                Text(title).font(.system(size: 15, weight: .medium))
-            }
-            .foregroundStyle(tab == index ? Color.primary : .secondary)
-            .frame(maxWidth: .infinity).frame(height: 76)
-            .background(tab == index ? Color(.secondarySystemBackground) : .clear, in: Capsule())
+        .sheet(isPresented: $settings) {
+            SettingsView().environmentObject(library).presentationDetents([.medium, .large])
+        }
+        .fullScreenCover(item: $selected) { book in
+            ReaderView(book: book).environmentObject(library)
         }
     }
-    func bookRow(_ book: BookItem, showProgress: Bool) -> some View {
-        Button { selected = book } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(book.title).font(.system(size: 18, weight: .medium)).foregroundStyle(.primary)
-                if !book.author.isEmpty { Text(book.author).font(.subheadline).foregroundStyle(.secondary) }
-                if showProgress { Text("已读 \(Int(book.progress * 100))%").font(.caption).foregroundStyle(.secondary) }
-                Divider().padding(.top, 10)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "book.closed.fill").font(.title2)
+                Text("BookX").font(.system(size: 24, weight: .bold, design: .serif))
+                Spacer()
+                if tab == 0 {
+                    Button { settings = true } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.title3.weight(.medium))
+                            .frame(width: 50, height: 50)
+                            .background(.white.opacity(0.75), in: Circle())
+                            .shadow(color: BookXStyle.purple.opacity(0.1), radius: 9, y: 4)
+                    }
+                    .accessibilityLabel("阅读设置")
+                }
+            }
+            .foregroundStyle(BookXStyle.purple)
+            Text(tab == 0 ? "书架" : "书库")
+                .font(.system(size: 43, weight: .bold, design: .serif))
+                .foregroundStyle(BookXStyle.ink)
+            Text(tab == 0 ? "读过 \(recent.count) 本" : "共 \(library.books.count) 本")
+                .font(.system(size: 16))
+                .foregroundStyle(BookXStyle.muted)
+        }
+        .padding(.bottom, 6)
+    }
+    @ViewBuilder private var shelfContent: some View {
+        if let first = recent.first {
+            sectionTitle("最近阅读")
+            Button { selected = first } label: {
+                HStack(alignment: .center, spacing: 17) {
+                    BookCover(title: first.title, large: true).frame(width: 116)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("继续阅读").font(.subheadline.weight(.medium)).foregroundStyle(BookXStyle.purple)
+                        Text(first.title).font(.system(size: 23, weight: .bold)).foregroundStyle(BookXStyle.ink).lineLimit(2)
+                        if !first.author.isEmpty {
+                            Text(first.author).font(.subheadline).foregroundStyle(BookXStyle.muted)
+                        }
+                        Text("已读 \(Int(first.progress * 100))%")
+                            .font(.subheadline).foregroundStyle(BookXStyle.muted)
+                        progressBar(first.progress)
+                        Text("继续阅读  ›")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(BookXStyle.purple)
+                            .padding(.horizontal, 16).padding(.vertical, 9)
+                            .background(BookXStyle.lilac.opacity(0.8), in: Capsule())
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 26))
+                .shadow(color: BookXStyle.purple.opacity(0.09), radius: 16, y: 7)
+            }.buttonStyle(.plain)
+            if recent.count > 1 {
+                sectionTitle("更早读过").padding(.top, 4)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 20) {
+                    ForEach(recent.dropFirst()) { book in
+                        Button { selected = book } label: {
+                            VStack(alignment: .leading, spacing: 7) {
+                                BookCover(title: book.title, large: true)
+                                Text(book.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                Text("已读 \(Int(book.progress * 100))%")
+                                    .font(.caption).foregroundStyle(BookXStyle.muted)
+                                progressBar(book.progress)
+                            }.foregroundStyle(BookXStyle.ink)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+        } else {
+            ContentUnavailableView("还没有阅读记录", systemImage: "books.vertical", description: Text("从书库打开一本书，即可在这里继续阅读"))
+                .padding(.top, 45)
+        }
+    }
+    @ViewBuilder private var libraryContent: some View {
+        if library.books.isEmpty {
+            ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入 TXT 或 EPUB"))
+                .padding(.top, 45)
+        } else {
+            let letters = Array(Set(sortedBooks.map { initial($0.title) })).sorted()
+            ForEach(letters, id: \.self) { letter in
+                Text(letter)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(BookXStyle.purple)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 15).padding(.vertical, 7)
+                    .background(BookXStyle.lilac.opacity(0.65), in: Capsule())
+                ForEach(sortedBooks.filter { initial($0.title) == letter }) { book in
+                    Button { selected = book } label: {
+                        HStack(spacing: 16) {
+                            BookCover(title: book.title, large: false).frame(width: 65)
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(book.title).font(.system(size: 20, weight: .bold)).foregroundStyle(BookXStyle.ink)
+                                if !book.author.isEmpty {
+                                    Text(book.author).font(.subheadline).foregroundStyle(BookXStyle.muted)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(BookXStyle.purple)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 22))
+                        .shadow(color: BookXStyle.purple.opacity(0.08), radius: 12, y: 5)
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+    }
+    private func sectionTitle(_ title: String) -> some View {
+        HStack(spacing: 9) {
+            Capsule().fill(BookXStyle.purple).frame(width: 4, height: 21)
+            Text(title).font(.system(size: 19, weight: .bold)).foregroundStyle(BookXStyle.ink)
+        }
+    }
+    private func progressBar(_ value: Double) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(BookXStyle.lilac)
+                Capsule().fill(BookXStyle.purple).frame(width: geo.size.width * min(1, max(0, value)))
+            }
+        }.frame(height: 5)
+    }
+    private var bottomBar: some View {
+        HStack(spacing: 9) {
+            tabButton("books.vertical.fill", "书架", index: 0)
+            Button { importer = true } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).frame(height: 68)
+                    .background(BookXStyle.purple.gradient, in: Capsule())
+            }.accessibilityLabel("导入书籍")
+            tabButton("book.open", "书库", index: 1)
+        }
+        .padding(7)
+        .background(.white.opacity(0.9), in: Capsule())
+        .overlay(Capsule().stroke(BookXStyle.purple.opacity(0.13), lineWidth: 1))
+        .shadow(color: BookXStyle.purple.opacity(0.13), radius: 15, y: 7)
+        .padding(.horizontal, 22)
+        .padding(.bottom, 8)
+    }
+    private func tabButton(_ symbol: String, _ title: String, index: Int) -> some View {
+        Button { tab = index } label: {
+            VStack(spacing: 4) {
+                Image(systemName: symbol).font(.system(size: 24))
+                Text(title).font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(tab == index ? BookXStyle.purple : BookXStyle.ink)
+            .frame(maxWidth: .infinity).frame(height: 68)
+            .background(tab == index ? BookXStyle.lilac.opacity(0.8) : .clear, in: Capsule())
         }
     }
 }
