@@ -1,0 +1,18 @@
+name: BookX
+options:
+  bundleIdPrefix: com.huangenxu
+targets:
+  BookX:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [BookX]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.huangenxu.BookX
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        SWIFT_VERSION: 5.9
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: NO
