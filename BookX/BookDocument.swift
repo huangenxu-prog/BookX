@@ -36,6 +36,14 @@ enum BookDocumentLoader {
         return BookDocument(text: text.replacingOccurrences(of: "\r\n", with: "\n"))
     }
 
+    private static func normalizeReadingText(_ source: String) -> String {
+        var text = source.replacingOccurrences(of: "\\r\\n?", with: "\\n", options: .regularExpression)
+        text = text.replacingOccurrences(of: "[\\u{00A0}\\u{2002}\\u{2003}\\u{3000}\\t]+", with: " ", options: .regularExpression)
+        text = text.replacingOccurrences(of: "[ ]*\\n[ ]*", with: "\\n", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\n{3,}", with: "\\n\\n", options: .regularExpression)
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func epub(_ url: URL) throws -> BookDocument {
         let archive = try Archive(url: url, accessMode: .read)
         var totalBytes = 0
@@ -77,7 +85,7 @@ enum BookDocumentLoader {
             let path = base.appendingPathComponent(href.removingPercentEncoding ?? href).standardizedFileURL.path
             let chapter = EPUBXML()
             try chapter.parse(read(String(path.dropFirst())), body: true)
-            let text = chapter.bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = normalizeReadingText(chapter.bodyText)
             if !text.isEmpty { sections.append(text) }
         }
         guard !sections.isEmpty else {
@@ -100,6 +108,8 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
     private var readingBody = false
     private var bodyOnly = false
     private var ignoredDepth = 0
+    private var bodyFragments: [String] = []
+    private var lastWasNewline = false
 
     func parse(_ data: Data, body: Bool = false) throws {
         bodyOnly = body
@@ -123,6 +133,7 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
         guard parser.parse() else {
             throw BookReadError.invalid("EPUB 目录或章节格式损坏，无法读取。")
         }
+        if bodyOnly { bodyText = bodyFragments.joined() }
     }
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String]) {
         elements.append(name)
@@ -137,7 +148,10 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
     }
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         if bodyOnly {
-            if readingBody && ignoredDepth == 0 { bodyText += string }
+            if readingBody && ignoredDepth == 0 {
+                bodyFragments.append(string)
+                lastWasNewline = string.hasSuffix("\n")
+            }
         } else if elements.contains("metadata") {
             if elements.last == "title" { title += string }
             if elements.last == "creator" { author += string }
@@ -153,7 +167,7 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
         _ = elements.popLast()
     }
     private func newline() {
-        if !bodyText.hasSuffix("\n") { bodyText += "\n" }
+        if !lastWasNewline { bodyFragments.append("\n"); lastWasNewline = true }
     }
 }
 
