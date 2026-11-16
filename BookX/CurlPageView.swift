@@ -73,7 +73,9 @@ struct CurlPageView: UIViewControllerRepresentable {
                         .lineSpacing(lineSpacing)
                         .foregroundStyle(parent.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(24)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 90)
+                        .padding(.bottom, 75)
                 }
                 .background(parent.background)
             )
