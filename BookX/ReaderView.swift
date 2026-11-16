@@ -77,6 +77,7 @@ struct ReaderView: View {
         }
         .foregroundStyle(ink)
         .background(bg.ignoresSafeArea())
+        .preferredColorScheme(library.paper == 3 ? .dark : .light)
         .task(id: library.fontSize) { await loadText() }
         .onChange(of: currentPage) { _, _ in savePosition() }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition() } }
