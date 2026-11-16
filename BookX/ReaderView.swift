@@ -52,7 +52,7 @@ struct ReaderView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             } else if library.pageMode == 2 {
-                CoverPageView(pages: pages.map(\\.text), currentPage: $currentPage,
+                CoverPageView(pages: pages.map(\.text), currentPage: $currentPage,
                               fontSize: library.fontSize, lineSpacing: library.lineSpacing,
                               ink: ink, background: bg)
             } else {
