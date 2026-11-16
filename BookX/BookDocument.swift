@@ -103,7 +103,20 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
 
     func parse(_ data: Data, body: Bool = false) throws {
         bodyOnly = body
-        let parser = XMLParser(data: data)
+        // EPUB XHTML often uses HTML entities from an external DTD. Resolve the
+        // common typography locally, without fetching external resources.
+        var xml = data
+        if body, var text = String(data: data, encoding: .utf8) {
+            let entities = ["nbsp": 160, "ensp": 8194, "emsp": 8195, "thinsp": 8201,
+                            "ndash": 8211, "mdash": 8212, "lsquo": 8216, "rsquo": 8217,
+                            "ldquo": 8220, "rdquo": 8221, "hellip": 8230, "bull": 8226,
+                            "middot": 183, "copy": 169, "reg": 174, "trade": 8482]
+            for (name, code) in entities {
+                text = text.replacingOccurrences(of: "&\(name);", with: "&#\(code);")
+            }
+            xml = Data(text.utf8)
+        }
+        let parser = XMLParser(data: xml)
         parser.shouldProcessNamespaces = true
         parser.shouldResolveExternalEntities = false
         parser.delegate = self

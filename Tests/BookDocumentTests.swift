@@ -22,6 +22,12 @@ final class BookDocumentTests: XCTestCase {
         let second = try XCTUnwrap(book.text.range(of: "第二章"))
         XCTAssertLessThan(first.lowerBound, second.lowerBound)
     }
+    func testEPUBTypographyDoesNotRequireExternalDTD() throws {
+        let book = try BookDocumentLoader.load(fixture("typography.epub"))
+        XCTAssertTrue(book.text.contains("“春天”"))
+        XCTAssertTrue(book.text.contains("—"))
+        XCTAssertTrue(book.text.contains("\u{00a0}"))
+    }
     func testBrokenEPUBFailsInsteadOfImportingEmptyBook() {
         XCTAssertThrowsError(try BookDocumentLoader.load(fixture("broken.epub")))
     }
