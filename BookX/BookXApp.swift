@@ -353,13 +353,18 @@ struct RootView: View {
                         HStack(spacing: 16) {
                             BookCover(title: book.title, large: false).frame(width: 65)
                             VStack(alignment: .leading, spacing: 7) {
-                                Text(book.title).font(.system(size: 20, weight: .bold)).foregroundStyle(BookXStyle.ink)
+                                Text(book.title)
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundStyle(BookXStyle.ink)
+                                    .lineLimit(2)
+                                    .truncationMode(.tail)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 if !book.author.isEmpty {
-                                    Text(book.author).font(.subheadline).foregroundStyle(BookXStyle.muted)
+                                    Text(book.author).font(.subheadline).foregroundStyle(BookXStyle.muted).lineLimit(1).truncationMode(.tail)
                                 }
                             }
-                            Spacer()
                             Image(systemName: "chevron.right").foregroundStyle(BookXStyle.purple)
+                                .frame(width: 20)
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
