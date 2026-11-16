@@ -192,6 +192,7 @@ private struct BookCover: View {
 struct RootView: View {
     @EnvironmentObject private var library: BookLibrary
     @State private var tab = 0
+    @Namespace private var glassSelection
     @State private var importer = false
     @State private var settings = false
     @State private var selected: BookItem?
@@ -402,26 +403,45 @@ struct RootView: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity).frame(height: 68)
                     .background(BookXStyle.ink, in: Capsule())
-            }.accessibilityLabel("导入书籍").disabled(library.importing)
+            }
+            .accessibilityLabel("导入书籍")
+            .disabled(library.importing)
             tabButton("line.3.horizontal", "书库", index: 1)
         }
         .padding(7)
-        .background(BookXStyle.paper, in: Capsule())
-        .overlay(Capsule().stroke(BookXStyle.purple.opacity(0.13), lineWidth: 1))
-        .shadow(color: BookXStyle.purple.opacity(0.13), radius: 15, y: 7)
+        .background { glassBarBackground }
+        .overlay(Capsule().stroke(.white.opacity(0.55), lineWidth: 1))
+        .shadow(color: BookXStyle.purple.opacity(0.12), radius: 16, y: 7)
         .padding(.horizontal, 22)
         .padding(.bottom, 8)
     }
+    @ViewBuilder private var glassBarBackground: some View {
+        if #available(iOS 26.0, *) {
+            Capsule().fill(.ultraThinMaterial)
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            Capsule().fill(.ultraThinMaterial)
+        }
+    }
     private func tabButton(_ symbol: String, _ title: String, index: Int) -> some View {
-        Button { tab = index } label: {
+        Button {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) { tab = index }
+        } label: {
             VStack(spacing: 4) {
                 Image(systemName: symbol).font(.system(size: 24))
                 Text(title).font(.system(size: 14, weight: .semibold))
             }
             .foregroundStyle(tab == index ? BookXStyle.purple : BookXStyle.ink)
             .frame(maxWidth: .infinity).frame(height: 68)
-            .background(tab == index ? BookXStyle.lilac.opacity(0.75) : .clear, in: Capsule())
+            .background {
+                if tab == index {
+                    Capsule()
+                        .fill(BookXStyle.lilac.opacity(0.64))
+                        .matchedGeometryEffect(id: "selected-glass-tab", in: glassSelection)
+                }
+            }
         }
+        .buttonStyle(.plain)
         .accessibilityIdentifier(index == 0 ? "tab-shelf" : "tab-library")
     }
 }
@@ -429,9 +449,9 @@ struct RootView: View {
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: BookLibrary
-    private let accent = Color(red: 0.72, green: 0.25, blue: 0.19)
-    private let paper = Color(red: 0.985, green: 0.971, blue: 0.942)
-    private let ink = Color(red: 0.15, green: 0.14, blue: 0.12)
+    private let accent = Color(red: 0.14, green: 0.32, blue: 0.26)
+    private let paper = Color(red: 0.973, green: 0.977, blue: 0.960)
+    private let ink = Color(red: 0.14, green: 0.19, blue: 0.16)
     private let backgrounds: [(String, Color)] = [
         ("白色", .white),
         ("米黄", Color(red: 0.97, green: 0.93, blue: 0.85)),
