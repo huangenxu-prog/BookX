@@ -376,6 +376,11 @@ struct RootView: View {
                     .contextMenu {
                         Button("删除书籍", role: .destructive) { pendingDeletion = book }
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { pendingDeletion = book } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    }
                 }
             }
         }
