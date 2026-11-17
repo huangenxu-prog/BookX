@@ -38,6 +38,7 @@ enum ScreenPagination {
         var characterOffset = 0
         var result: [ReadingPage] = []
         while cursor < source.length {
+            try Task.checkCancellation()
             // A bounded window avoids laying out millions of characters for every page.
             let page: String = try autoreleasepool {
             let window = source.rangeOfComposedCharacterSequences(for:
@@ -53,7 +54,7 @@ enum ScreenPagination {
             return chunk.substring(to: count)
             }
             result.append(ReadingPage(offset: characterOffset, text: page))
-            characterOffset += page.count
+            characterOffset += page.utf16.count
             cursor += page.utf16.count
         }
         return result
