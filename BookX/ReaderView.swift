@@ -16,6 +16,9 @@ struct ReaderView: View {
     @State private var chapterList: [BookChapter] = []
     @StateObject private var speech = BookSpeech()
     @State private var listening = false
+    @State private var paginationTask: Task<Void, Never>?
+    @State private var paginationGeneration = UUID()
+    @State private var isPreviewPagination = false
 
     private var bg: Color {
         switch library.paper {
@@ -118,7 +121,7 @@ struct ReaderView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
-        .onDisappear { savePosition(); library.save(); speech.stop(); listening = false }
+        .onDisappear { paginationTask?.cancel(); paginationGeneration = UUID(); savePosition(); library.save(); speech.stop(); listening = false }
         .sheet(isPresented: $showContents) {
             NavigationStack {
                 Group {
@@ -211,11 +214,16 @@ struct ReaderView: View {
     }
     private func savePosition() {
         guard loaded, errorMessage == nil, pages.indices.contains(currentPage) else { return }
-        library.updateProgress(book.id,
-            Double(currentPage) / Double(max(1, pages.count - 1)), offset: pages[currentPage].offset)
+        let absoluteOffset = pages[currentPage].offset
+        let fraction = document.map { Double(absoluteOffset) / Double(max(1, $0.text.count)) }
+            ?? Double(currentPage) / Double(max(1, pages.count - 1))
+        library.updateProgress(book.id, fraction, offset: absoluteOffset)
     }
     private func loadText(pageSize: CGSize) async {
         guard pageSize.width > 48, pageSize.height > 40 else { return }
+        paginationTask?.cancel()
+        paginationTask = nil
+        paginationGeneration = UUID()
         speech.stop()
         listening = false
         savePosition()
@@ -238,22 +246,58 @@ struct ReaderView: View {
             // A rapid font slider drag should not start a full-book pagination for every tick.
             if cached != nil { try await Task.sleep(nanoseconds: 120_000_000) }
             try Task.checkCancellation()
-            let (parsed, result) = try await Task.detached(priority: .userInitiated) {
+            // Read cached layouts immediately; otherwise paginate only a short
+            // neighborhood around the saved position before showing the reader.
+            let saved = library.books.first(where: { $0.id == book.id }) ?? book
+            let savedOffset = saved.readingOffset
+            let (parsed, result, partial) = try await Task.detached(priority: .userInitiated) {
                 let parsed = try cached ?? BookDocumentStore.load(url)
                 if let ready = BookPageStore.load(url, key: layoutKey) {
-                    return (parsed, ready)
+                    return (parsed, ready, false)
                 }
-                let result = try screenPages
-                    ? ScreenPagination.pages(parsed.text, size: textSize, fontSize: size, lineSpacing: spacing)
-                    : BookPagination.pages(parsed.text, fontSize: size)
-                BookPageStore.save(result, source: url, key: layoutKey)
-                return (parsed, result)
+                let source = parsed.text as NSString
+                let target = max(0, min(source.length, savedOffset ?? Int(saved.progress * Double(source.length))))
+                // A little context before the bookmark allows backwards page turns.
+                let start = max(0, target - 3000)
+                let window = source.rangeOfComposedCharacterSequences(for:
+                    NSRange(location: start, length: min(36000, source.length - start)))
+                let fragment = source.substring(with: window)
+                let local = try screenPages
+                    ? ScreenPagination.pages(fragment, size: textSize, fontSize: size, lineSpacing: spacing)
+                    : BookPagination.pages(fragment, fontSize: size)
+                let preview = local.map { ReadingPage(offset: window.location + $0.offset, text: $0.text) }
+                return (parsed, preview, true)
             }.value
             guard !Task.isCancelled else { return }
             guard !result.isEmpty else { throw BookReadError.invalid("文件没有可阅读的正文。") }
             library.cacheDocument(parsed, for: book.id)
-            library.cachePages(result, for: book.id, key: layoutKey)
+            if !partial { library.cachePages(result, for: book.id, key: layoutKey) }
+            isPreviewPagination = partial
             install(parsed, pages: result)
+            if partial {
+                let generation = paginationGeneration
+                paginationTask = Task {
+                    // Run the expensive complete layout off the main actor.
+                    let full: [ReadingPage]?
+                    do {
+                        full = try await Task.detached(priority: .utility) {
+                            let result = try screenPages
+                                ? ScreenPagination.pages(parsed.text, size: textSize, fontSize: size, lineSpacing: spacing)
+                                : BookPagination.pages(parsed.text, fontSize: size)
+                            if !Task.isCancelled { BookPageStore.save(result, source: url, key: layoutKey) }
+                            return result
+                        }.value
+                    } catch { full = nil }
+                    guard !Task.isCancelled, generation == paginationGeneration,
+                          let full, !full.isEmpty else { return }
+                    // Preserve the exact reading location while replacing preview pages.
+                    let position = pages.indices.contains(currentPage) ? pages[currentPage].offset : (savedOffset ?? 0)
+                    library.cachePages(full, for: book.id, key: layoutKey)
+                    pages = full
+                    currentPage = BookPagination.pageIndex(for: position, in: full)
+                    isPreviewPagination = false
+                }
+            }
         } catch {
             guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
