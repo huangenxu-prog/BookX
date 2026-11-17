@@ -14,8 +14,6 @@ struct ReaderView: View {
     @State private var showContents = false
     @State private var document: BookDocument?
     @State private var chapterList: [BookChapter] = []
-    @StateObject private var speech = BookSpeech()
-    @State private var listening = false
     @State private var paginationTask: Task<Void, Never>?
     @State private var paginationGeneration = UUID()
     @State private var isPreviewPagination = false
@@ -25,8 +23,6 @@ struct ReaderView: View {
     @State private var chapterTask: Task<Void, Never>?
     @State private var prefetchTask: Task<Void, Never>?
     @State private var chapterError: String?
-    @State private var waitingForSpeechPage = false
-    @State private var spokenLocation: EPUBLocation?
     @State private var resolvedNeighbors: [Int: Set<Int>] = [:]
     @State private var windowRevision = UUID()
 
@@ -121,27 +117,9 @@ struct ReaderView: View {
         .onChange(of: currentLocation) { _, _ in
             savePosition()
             if epubIndex != nil { prefetchChapters() }
-            if listening && pages.indices.contains(currentPage) {
-                playCurrentPage()
-            }
-        }
-        .onChange(of: speech.finishedPage) { _, page in
-            guard listening, let page, epubIndex != nil || page == currentPage else { return }
-            if pages.indices.contains(currentPage + 1) {
-                move(to: currentPage + 1)
-            } else if epubIndex != nil {
-                waitingForSpeechPage = true
-                prefetchChapters()
-            } else {
-                listening = false
-                speech.stop()
-            }
-        }
-        .onChange(of: speech.errorMessage) { _, message in
-            if message != nil { listening = false; waitingForSpeechPage = false; spokenLocation = nil }
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
-        .onDisappear { chapterTask?.cancel(); prefetchTask?.cancel(); paginationTask?.cancel(); paginationGeneration = UUID(); savePosition(); library.save(); speech.stop(); listening = false }
+        .onDisappear { chapterTask?.cancel(); prefetchTask?.cancel(); paginationTask?.cancel(); paginationGeneration = UUID(); savePosition(); library.save() }
         .sheet(isPresented: $showContents) {
             NavigationStack {
                 Group {
@@ -171,9 +149,6 @@ struct ReaderView: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .alert("听书失败", isPresented: Binding(get: { speech.errorMessage != nil }, set: { if !$0 { speech.errorMessage = nil } })) {
-            Button("知道了") { speech.errorMessage = nil }
-        } message: { Text(speech.errorMessage ?? "") }
         .alert("章节加载失败", isPresented: Binding(get: { chapterError != nil }, set: { if !$0 { chapterError = nil } })) {
             Button("重试") { chapterError = nil; prefetchChapters() }
             Button("取消", role: .cancel) { chapterError = nil }
@@ -198,44 +173,12 @@ struct ReaderView: View {
                     Button { settings = true } label: {
                         Label("排版", systemImage: "textformat.size")
                     }
-                    if listening {
-                        Button { speech.togglePause() } label: {
-                            Label(speech.isPaused ? "继续听书" : "暂停听书", systemImage: speech.isPaused ? "play.fill" : "pause.fill")
-                        }
-                        Button { toggleListening() } label: {
-                            Label("停止听书", systemImage: "stop.fill")
-                        }
-                    } else {
-                        Button { toggleListening() } label: {
-                            Label("听书", systemImage: "headphones")
-                        }.disabled(!loaded)
-                    }
+
                 } label: {
                     Image(systemName: "ellipsis").font(.title3).frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("阅读功能")
             }.padding(.horizontal)
-    }
-
-    private func toggleListening() {
-        if listening {
-            speech.stop()
-            listening = false
-            waitingForSpeechPage = false
-        } else if loaded && pages.indices.contains(currentPage) {
-            listening = true
-            spokenLocation = nil
-            playCurrentPage()
-        }
-    }
-
-    private func playCurrentPage() {
-        guard pages.indices.contains(currentPage) else { return }
-        let page = pages[currentPage]
-        let location = EPUBLocation(resource: page.resourceIndex ?? -1, offset: page.offset)
-        guard spokenLocation != location else { return }
-        spokenLocation = location
-        speech.play(page.text, page: currentPage)
     }
 
     private func pageText(_ text: String) -> some View {
@@ -276,10 +219,6 @@ struct ReaderView: View {
         paginationTask?.cancel()
         paginationTask = nil
         paginationGeneration = UUID()
-        speech.stop()
-        listening = false
-        spokenLocation = nil
-        waitingForSpeechPage = false
         savePosition()
         loaded = false
         errorMessage = nil
@@ -453,7 +392,7 @@ struct ReaderView: View {
         prefetchTask?.cancel()
         prefetchTask = nil
         paginationGeneration = UUID()
-        speech.stop(); listening = false; waitingForSpeechPage = false
+        speech.stop(); listening = false
         loaded = false; errorMessage = nil; chapterError = nil
         chapterTask = Task { await openEPUB(layout: layout, destination: EPUBLocation(resource: resource, offset: 0)) }
     }
@@ -480,15 +419,9 @@ struct ReaderView: View {
                     resolvedNeighbors[resource, default: []].insert(direction)
                     if let chapter { extendWindow(chapter) }
                 }
-                if waitingForSpeechPage && listening {
-                    waitingForSpeechPage = false
-                    if pages.indices.contains(currentPage + 1) { move(to: currentPage + 1) }
-                    else { listening = false; speech.stop() }
-                }
-            } catch {
+                    } catch {
                 guard !Task.isCancelled, generation == paginationGeneration else { return }
                 chapterError = error.localizedDescription
-                if waitingForSpeechPage { waitingForSpeechPage = false; listening = false; speech.stop() }
             }
             guard generation == paginationGeneration else { return }
             prefetchTask = nil
