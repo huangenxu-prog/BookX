@@ -3,8 +3,8 @@ import UIKit
 
 /// UIKit's native page curl, bridged into SwiftUI.
 struct CurlPageView: UIViewControllerRepresentable {
-    static let headerHeight: CGFloat = 44
-    static let footerHeight: CGFloat = 44
+    static let headerHeight: CGFloat = 40
+    static let footerHeight: CGFloat = 28
 
     let pages: [ReadingPage]
     @Binding var currentPage: Int
@@ -102,6 +102,9 @@ struct CurlPageView: UIViewControllerRepresentable {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .foregroundStyle(parent.ink)
                 .background(parent.background)
+                // Hosting controllers otherwise add their own safe-area margins,
+                // duplicating the insets already included in the turning sheet.
+                .ignoresSafeArea()
             )
         }
 
