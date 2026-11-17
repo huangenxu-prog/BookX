@@ -74,3 +74,21 @@ extension BookDocumentTests {
     }
 }
 #endif
+
+extension BookDocumentTests {
+    func testParsedBookCacheSurvivesReopenAndRejectsStaleOrBrokenData() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cache = root.appendingPathComponent("cache")
+        let book = root.appendingPathComponent("book.txt")
+        try "第一章 缓存正文".write(to: book, atomically: true, encoding: .utf8)
+        let first = try BookDocumentStore.load(book, directory: cache)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cache.appendingPathComponent("book.txt.parsed").path))
+        XCTAssertEqual(try BookDocumentStore.load(book, directory: cache).text, first.text)
+        try "第二章 修改后必须读取新的正文".write(to: book, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try BookDocumentStore.load(book, directory: cache).text, "第二章 修改后必须读取新的正文")
+        try Data("broken".utf8).write(to: cache.appendingPathComponent("book.txt.parsed"))
+        XCTAssertEqual(try BookDocumentStore.load(book, directory: cache).text, "第二章 修改后必须读取新的正文")
+    }
+}

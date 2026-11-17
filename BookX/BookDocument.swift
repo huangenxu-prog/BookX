@@ -2,12 +2,12 @@ import Foundation
 import CoreFoundation
 import ZIPFoundation
 
-struct BookChapter: Sendable {
+struct BookChapter: Codable, Sendable {
     let title: String
     let offset: Int
 }
 
-struct BookDocument {
+struct BookDocument: Codable, Sendable {
     var title: String = ""
     var author: String = ""
     var text: String
@@ -42,12 +42,18 @@ enum BookDocumentLoader {
         return BookDocument(text: text.replacingOccurrences(of: "\r\n", with: "\n"))
     }
 
+    private static let normalizationRules: [(NSRegularExpression, String)] = [
+        (#"[\x{00A0}\x{2002}\x{2003}\x{3000}\t]+"#, " "),
+        (#" *\n *"#, "\n"),
+        (#"\n{3,}"#, "\n\n")
+    ].map { (try! NSRegularExpression(pattern: $0.0), $0.1) }
+
     private static func normalizeReadingText(_ source: String) -> String {
         var text = source.replacingOccurrences(of: "\r\n", with: "\n")
         text = text.replacingOccurrences(of: "\r", with: "\n")
-        text = text.replacingOccurrences(of: "[\\x{00A0}\\x{2002}\\x{2003}\\x{3000}\\t]+", with: " ", options: .regularExpression)
-        text = text.replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
+        for (expression, replacement) in normalizationRules {
+            text = expression.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: replacement)
+        }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -134,7 +140,7 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
         // EPUB XHTML often uses HTML entities from an external DTD. Resolve the
         // common typography locally, without fetching external resources.
         var xml = data
-        if body, var text = String(data: data, encoding: .utf8) {
+        if body, var text = String(data: data, encoding: .utf8), text.contains("&") {
             let entities = ["nbsp": 160, "ensp": 8194, "emsp": 8195, "thinsp": 8201,
                             "ndash": 8211, "mdash": 8212, "lsquo": 8216, "rsquo": 8217,
                             "ldquo": 8220, "rdquo": 8221, "hellip": 8230, "bull": 8226,
@@ -227,5 +233,45 @@ enum BookPagination {
             if pages[mid].offset <= offset { low = mid + 1 } else { high = mid }
         }
         return max(0, low - 1)
+    }
+}
+
+/// Disposable parsed-book cache. Original files remain the source of truth.
+enum BookDocumentStore {
+    private struct Entry: Codable {
+        let version: Int
+        let source: String
+        let size: Int
+        let modified: Date?
+        let document: BookDocument
+    }
+    private static func cacheURL(for url: URL, directory: URL?) -> URL {
+        let root = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BookXDocuments", isDirectory: true)
+        return root.appendingPathComponent(url.lastPathComponent + ".parsed")
+    }
+    static func load(_ url: URL, directory: URL? = nil) throws -> BookDocument {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let target = cacheURL(for: url, directory: directory)
+        if let data = try? Data(contentsOf: target),
+           let entry = try? PropertyListDecoder().decode(Entry.self, from: data),
+           entry.version == 1, entry.source == url.standardizedFileURL.path,
+           entry.size == values.fileSize, entry.modified == values.contentModificationDate {
+            return entry.document
+        }
+        let document = try BookDocumentLoader.load(url)
+        let entry = Entry(version: 1, source: url.standardizedFileURL.path,
+                          size: values.fileSize ?? 0, modified: values.contentModificationDate, document: document)
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        // Cache failures must never prevent a readable book from opening.
+        if let data = try? encoder.encode(entry) {
+            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: target, options: .atomic)
+        }
+        return document
+    }
+    static func remove(_ url: URL) {
+        try? FileManager.default.removeItem(at: cacheURL(for: url, directory: nil))
     }
 }

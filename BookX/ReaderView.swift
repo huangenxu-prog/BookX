@@ -11,7 +11,6 @@ struct ReaderView: View {
     @State private var errorMessage: String?
     @State private var loaded = false
     @State private var settings = false
-    @State private var menuVisible = false
     @State private var showContents = false
     @State private var document: BookDocument?
     @State private var chapterList: [BookChapter] = []
@@ -37,8 +36,29 @@ struct ReaderView: View {
                 Text(book.title).font(.subheadline).lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: .infinity)
                 Spacer()
-                Button { settings = true } label: { Image(systemName: "textformat.size").frame(width: 44, height: 44) }
-                    .accessibilityLabel("阅读设置")
+                Menu {
+                    Button { showContents = true } label: {
+                        Label("目录", systemImage: "list.bullet")
+                    }.disabled(!loaded)
+                    Button { settings = true } label: {
+                        Label("排版", systemImage: "textformat.size")
+                    }
+                    if listening {
+                        Button { speech.togglePause() } label: {
+                            Label(speech.isPaused ? "继续听书" : "暂停听书", systemImage: speech.isPaused ? "play.fill" : "pause.fill")
+                        }
+                        Button { toggleListening() } label: {
+                            Label("停止听书", systemImage: "stop.fill")
+                        }
+                    } else {
+                        Button { toggleListening() } label: {
+                            Label("听书", systemImage: "headphones")
+                        }.disabled(!loaded)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis").font(.title3).frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("阅读功能")
             }.padding(.horizontal)
 
             GeometryReader { geometry in
@@ -80,15 +100,6 @@ struct ReaderView: View {
                 }
             }
 
-            }
-            .overlay(alignment: .center) {
-                if loaded {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .frame(width: 88, height: 88)
-                        .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { menuVisible.toggle() } }
-                        .accessibilityLabel("阅读菜单")
-                }
             }
             .task(id: "\(Int(geometry.size.width))-\(Int(geometry.size.height))-\(library.fontSize)-\(library.lineSpacing)-\(library.pageMode)") {
                 await loadText(pageSize: geometry.size)
@@ -138,49 +149,6 @@ struct ReaderView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
         .onDisappear { savePosition(); library.save(); speech.stop(); listening = false }
-        .overlay(alignment: .bottom) {
-            if loaded && menuVisible {
-                HStack(spacing: 26) {
-                    Button { showContents = true } label: {
-                        Label("目录", systemImage: "list.bullet").frame(maxWidth: .infinity)
-                    }
-                    Button { settings = true } label: {
-                        Label("排版", systemImage: "textformat.size").frame(maxWidth: .infinity)
-                    }
-                    Button { toggleListening() } label: {
-                        Label(listening ? "停止听书" : "听书", systemImage: listening ? "stop.fill" : "headphones").frame(maxWidth: .infinity)
-                    }
-                }
-                .font(.system(size: 16, weight: .medium))
-                .padding(18)
-                .foregroundStyle(ink)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
-                .padding(.horizontal, 24)
-                .padding(.bottom, 56)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if listening && loaded {
-                HStack(spacing: 16) {
-                    Image(systemName: "headphones")
-                    Text("正在听书").font(.subheadline)
-                    Spacer()
-                    Button { speech.togglePause() } label: {
-                        Image(systemName: speech.isPaused ? "play.fill" : "pause.fill")
-                            .frame(width: 44, height: 44)
-                    }.accessibilityLabel(speech.isPaused ? "继续朗读" : "暂停朗读")
-                    Button { speech.stop(); listening = false } label: {
-                        Image(systemName: "stop.fill").frame(width: 44, height: 44)
-                    }.accessibilityLabel("停止听书")
-                }
-                .padding(.horizontal, 20)
-                .foregroundStyle(ink)
-                .background(.regularMaterial, in: Capsule())
-                .padding(.horizontal, 20)
-                .padding(.bottom, 112)
-            }
-        }
         .sheet(isPresented: $showContents) {
             NavigationStack {
                 Group {
@@ -220,7 +188,6 @@ struct ReaderView: View {
             listening = false
         } else if loaded && pages.indices.contains(currentPage) {
             listening = true
-            menuVisible = false
             speech.play(pages[currentPage].text, page: currentPage)
         }
     }
@@ -254,35 +221,45 @@ struct ReaderView: View {
         let size = library.fontSize
         let spacing = library.lineSpacing
         let screenPages = library.pageMode == 1 || library.pageMode == 2
+        let layoutKey = screenPages ? "screen-\(Int(pageSize.width))-\(Int(pageSize.height))-\(size)-\(spacing)" : "flow-\(size)"
         do {
             let cached = document ?? library.cachedDocument(for: book.id)
+            if let cached, let ready = library.cachedPages(for: book.id, key: layoutKey) {
+                install(cached, pages: ready)
+                return
+            }
             // A rapid font slider drag should not start a full-book pagination for every tick.
             if cached != nil { try await Task.sleep(nanoseconds: 120_000_000) }
             try Task.checkCancellation()
             let (parsed, result) = try await Task.detached(priority: .userInitiated) {
-                let parsed = try cached ?? BookDocumentLoader.load(url)
+                let parsed = try cached ?? BookDocumentStore.load(url)
                 let result = try screenPages
                     ? ScreenPagination.pages(parsed.text, size: pageSize, fontSize: size, lineSpacing: spacing)
                     : BookPagination.pages(parsed.text, fontSize: size)
                 return (parsed, result)
             }.value
             guard !Task.isCancelled else { return }
-            let saved = library.books.first(where: { $0.id == book.id }) ?? book
             guard !result.isEmpty else { throw BookReadError.invalid("文件没有可阅读的正文。") }
-            document = parsed
             library.cacheDocument(parsed, for: book.id)
-            chapterList = parsed.chapters
-            pages = result
-            if let offset = saved.readingOffset {
-                currentPage = BookPagination.pageIndex(for: offset, in: pages)
-            } else {
-                currentPage = min(pages.count - 1, max(0, Int(saved.progress * Double(max(1, pages.count - 1)))))
-            }
-            loaded = true
-            savePosition()
+            library.cachePages(result, for: book.id, key: layoutKey)
+            install(parsed, pages: result)
         } catch {
             guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
         }
     }
+    private func install(_ parsed: BookDocument, pages result: [ReadingPage]) {
+        let saved = library.books.first(where: { $0.id == book.id }) ?? book
+        document = parsed
+        chapterList = parsed.chapters
+        pages = result
+        if let offset = saved.readingOffset {
+            currentPage = BookPagination.pageIndex(for: offset, in: pages)
+        } else {
+            currentPage = min(pages.count - 1, max(0, Int(saved.progress * Double(max(1, pages.count - 1)))))
+        }
+        loaded = true
+        savePosition()
+    }
+
 }

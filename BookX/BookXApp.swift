@@ -41,13 +41,22 @@ final class BookLibrary: ObservableObject {
     private var progressSaveTask: Task<Void, Never>?
     // Keep only the most recently parsed book. Strings/arrays share value storage.
     private var documentCache: (id: UUID, document: BookDocument)?
+    private var paginationCache: (id: UUID, key: String, pages: [ReadingPage])?
+    func cachedPages(for id: UUID, key: String) -> [ReadingPage]? {
+        guard paginationCache?.id == id, paginationCache?.key == key else { return nil }
+        return paginationCache?.pages
+    }
+    func cachePages(_ pages: [ReadingPage], for id: UUID, key: String) {
+        paginationCache = (id, key, pages)
+    }
     func cachedDocument(for id: UUID) -> BookDocument? {
         documentCache?.id == id ? documentCache?.document : nil
     }
     func cacheDocument(_ document: BookDocument, for id: UUID) {
+        if documentCache?.id != id { paginationCache = nil }
         documentCache = (id, document)
     }
-    func clearDocumentCache() { documentCache = nil }
+    func clearDocumentCache() { documentCache = nil; paginationCache = nil }
     private let fm = FileManager.default
     private var folder: URL { fm.urls(for: .documentDirectory, in: .userDomainMask)[0] }
     init() {
@@ -116,7 +125,7 @@ final class BookLibrary: ObservableObject {
                 let localURL = folder.appendingPathComponent(name)
                 do {
                     let document = try await Task.detached(priority: .userInitiated) {
-                        try BookDocumentLoader.load(localURL)
+                        try BookDocumentStore.load(localURL)
                     }.value
                     let id = UUID()
                     cacheDocument(document, for: id)
@@ -136,6 +145,7 @@ final class BookLibrary: ObservableObject {
         do {
             let url = fileURL(book)
             if fm.fileExists(atPath: url.path) { try fm.removeItem(at: url) }
+            BookDocumentStore.remove(url)
             books.removeAll { $0.id == book.id }
             if documentCache?.id == book.id { clearDocumentCache() }
             save()
