@@ -332,14 +332,39 @@ enum EPUBResourceStore {
         }
         return result
     }
+    private static func chapterURL(_ source: URL, position: Int) -> URL {
+        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BookXChapters", isDirectory: true)
+            .appendingPathComponent(source.lastPathComponent, isDirectory: true)
+        return root.appendingPathComponent("\(position).txt")
+    }
     static func chapter(_ source: URL, index: EPUBResourceIndex, at position: Int) throws -> String {
         guard index.resources.indices.contains(position) else {
             throw BookReadError.invalid("章节位置超出 EPUB 阅读顺序。")
         }
-        return try BookDocumentLoader.epubChapter(source, resource: index.resources[position])
+        try Task.checkCancellation()
+        let target = chapterURL(source, position: position)
+        if let sourceAttributes = try? FileManager.default.attributesOfItem(atPath: source.path),
+           let cacheAttributes = try? FileManager.default.attributesOfItem(atPath: target.path),
+           let sourceDate = sourceAttributes[.modificationDate] as? Date,
+           let cacheDate = cacheAttributes[.modificationDate] as? Date,
+           cacheDate >= sourceDate,
+           let data = try? Data(contentsOf: target, options: .mappedIfSafe),
+           let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        let text = try BookDocumentLoader.epubChapter(source, resource: index.resources[position])
+        try Task.checkCancellation()
+        if let data = text.data(using: .utf8) {
+            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+            try? data.write(to: target, options: .atomic)
+        }
+        return text
     }
     static func remove(_ source: URL) {
         try? FileManager.default.removeItem(at: indexURL(source))
+        try? FileManager.default.removeItem(at: chapterURL(source, position: 0).deletingLastPathComponent())
     }
 }
 
