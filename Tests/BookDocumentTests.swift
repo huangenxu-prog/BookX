@@ -49,3 +49,28 @@ final class BookDocumentTests: XCTestCase {
         XCTAssertTrue(BookPagination.pages("", fontSize: 19).isEmpty)
     }
 }
+
+#if canImport(CoreText)
+import CoreText
+
+extension BookDocumentTests {
+    func testScreenPaginationFitsWithoutDroppingText() throws {
+        let text = String(repeating: "春天来了。👨‍👩‍👧‍👦一起读书！\n\nA long English sentence to wrap across lines.\n", count: 100)
+        for size in [CGSize(width: 320, height: 480), CGSize(width: 393, height: 650)] {
+            for font in [19.0, 30.0] {
+                let pages = try ScreenPagination.pages(text, size: size, fontSize: font, lineSpacing: 8)
+                XCTAssertGreaterThan(pages.count, 1)
+                XCTAssertEqual(pages.map(\.text).joined(), text)
+                var offset = 0
+                for page in pages {
+                    XCTAssertEqual(page.offset, offset)
+                    let rect = CGRect(x: 0, y: 0, width: size.width - 48, height: size.height - 40)
+                    let frame = ScreenPagination.frame(ScreenPagination.attributed(page.text, fontSize: font, lineSpacing: 8), rect: rect)
+                    XCTAssertEqual(CTFrameGetVisibleStringRange(frame).length, (page.text as NSString).length)
+                    offset += page.text.count
+                }
+            }
+        }
+    }
+}
+#endif

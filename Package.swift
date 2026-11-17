@@ -7,7 +7,7 @@ let package = Package(
     dependencies: [.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")],
     targets: [
         .target(name: "BookXCore", dependencies: ["ZIPFoundation"], path: "BookX",
-                exclude: ["BookXApp.swift", "ReaderView.swift"], sources: ["BookDocument.swift"]),
+                exclude: ["BookXApp.swift", "ReaderView.swift"], sources: ["BookDocument.swift", "ScreenPagination.swift"]),
         .testTarget(name: "BookXCoreTests", dependencies: ["BookXCore"], path: "Tests",
                     resources: [.copy("Fixtures")])
     ]

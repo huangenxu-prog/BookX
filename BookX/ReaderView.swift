@@ -41,6 +41,8 @@ struct ReaderView: View {
                     .accessibilityLabel("阅读设置")
             }.padding(.horizontal)
 
+            GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
             if let errorMessage {
                 ContentUnavailableView("无法阅读", systemImage: "exclamationmark.book.closed", description: Text(errorMessage))
                 Spacer()
@@ -50,18 +52,10 @@ struct ReaderView: View {
                 CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .clipped()
-                    .overlay(alignment: .center) {
-                        // Only the small central tap target opens the menu; page turns stay independent.
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .frame(width: 64, height: 64)
-                            .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { menuVisible.toggle() } }
-                            .accessibilityLabel("阅读菜单")
-                    }
             } else if library.pageMode == 1 {
                 TabView(selection: $currentPage) {
                     ForEach(pages.indices, id: \.self) { i in
-                        ScrollView { pageText(i).padding(.vertical, 20) }.tag(i)
+                        ScreenPageView(text: pages[i].text, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink).tag(i)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -86,7 +80,22 @@ struct ReaderView: View {
                 }
             }
 
-            if loaded && errorMessage == nil && library.pageMode == 0 {
+            }
+            .overlay(alignment: .center) {
+                if loaded {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(width: 88, height: 88)
+                        .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { menuVisible.toggle() } }
+                        .accessibilityLabel("阅读菜单")
+                }
+            }
+            .task(id: "\(Int(geometry.size.width))-\(Int(geometry.size.height))-\(library.fontSize)-\(library.lineSpacing)-\(library.pageMode)") {
+                await loadText(pageSize: geometry.size)
+            }
+            }
+
+            if library.pageMode == 0 {
                 Text("\(currentPage + 1) / \(pages.count)")
                     .font(.caption)
                     .foregroundStyle(ink.opacity(0.65))
@@ -94,8 +103,9 @@ struct ReaderView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(bg)
+                    .opacity(loaded ? 1 : 0)
             }
-            if loaded && errorMessage == nil && library.pageMode != 0 {
+            if library.pageMode != 0 {
                 HStack {
                     Text("\(currentPage + 1) / \(pages.count)").accessibilityIdentifier("reading-position")
                     Spacer()
@@ -104,12 +114,13 @@ struct ReaderView: View {
                     Button { move(to: currentPage + 1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
                         .disabled(currentPage >= pages.count - 1).accessibilityLabel("下一页")
                 }.font(.caption).padding(.horizontal)
+                    .opacity(loaded ? 1 : 0)
+                    .disabled(!loaded)
             }
         }
         .foregroundStyle(ink)
         .background(bg.ignoresSafeArea())
         .preferredColorScheme(library.paper == 3 ? .dark : .light)
-        .task(id: library.fontSize) { await loadText() }
         .onChange(of: currentPage) { _, _ in
             savePosition()
             if listening && pages.indices.contains(currentPage) {
@@ -127,7 +138,7 @@ struct ReaderView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
         .onDisappear { savePosition(); library.save(); speech.stop(); listening = false }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .overlay(alignment: .bottom) {
             if loaded && menuVisible {
                 HStack(spacing: 26) {
                     Button { showContents = true } label: {
@@ -145,11 +156,11 @@ struct ReaderView: View {
                 .foregroundStyle(ink)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
                 .padding(.horizontal, 24)
-                .padding(.vertical, 8)
+                .padding(.bottom, 56)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .overlay(alignment: .bottom) {
             if listening && loaded {
                 HStack(spacing: 16) {
                     Image(systemName: "headphones")
@@ -167,7 +178,7 @@ struct ReaderView: View {
                 .foregroundStyle(ink)
                 .background(.regularMaterial, in: Capsule())
                 .padding(.horizontal, 20)
-                .padding(.vertical, 8)
+                .padding(.bottom, 112)
             }
         }
         .sheet(isPresented: $showContents) {
@@ -232,7 +243,8 @@ struct ReaderView: View {
         library.updateProgress(book.id,
             Double(currentPage) / Double(max(1, pages.count - 1)), offset: pages[currentPage].offset)
     }
-    private func loadText() async {
+    private func loadText(pageSize: CGSize) async {
+        guard pageSize.width > 48, pageSize.height > 40 else { return }
         speech.stop()
         listening = false
         savePosition()
@@ -240,6 +252,8 @@ struct ReaderView: View {
         errorMessage = nil
         let url = library.fileURL(book)
         let size = library.fontSize
+        let spacing = library.lineSpacing
+        let screenPages = library.pageMode == 1 || library.pageMode == 2
         do {
             let cached = document ?? library.cachedDocument(for: book.id)
             // A rapid font slider drag should not start a full-book pagination for every tick.
@@ -247,7 +261,10 @@ struct ReaderView: View {
             try Task.checkCancellation()
             let (parsed, result) = try await Task.detached(priority: .userInitiated) {
                 let parsed = try cached ?? BookDocumentLoader.load(url)
-                return (parsed, BookPagination.pages(parsed.text, fontSize: size))
+                let result = try screenPages
+                    ? ScreenPagination.pages(parsed.text, size: pageSize, fontSize: size, lineSpacing: spacing)
+                    : BookPagination.pages(parsed.text, fontSize: size)
+                return (parsed, result)
             }.value
             guard !Task.isCancelled else { return }
             let saved = library.books.first(where: { $0.id == book.id }) ?? book
