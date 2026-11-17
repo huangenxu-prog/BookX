@@ -14,6 +14,7 @@ struct ReaderView: View {
     @State private var menuVisible = false
     @State private var showContents = false
     @State private var documentText: String?
+    @State private var chapterList: [BookChapter] = []
     @StateObject private var speech = BookSpeech()
     @State private var listening = false
 
@@ -184,7 +185,26 @@ struct ReaderView: View {
         }
         .sheet(isPresented: $showContents) {
             NavigationStack {
-                ContentUnavailableView("暂无目录", systemImage: "list.bullet.rectangle", description: Text("当前版本暂未建立章节目录索引。"))
+                Group {
+                    if chapterList.isEmpty {
+                        ContentUnavailableView("暂无章节目录", systemImage: "list.bullet.rectangle", description: Text("此书没有可识别的章节标题。"))
+                    } else {
+                        List(chapterList.indices, id: \.self) { index in
+                            Button {
+                                move(to: BookPagination.pageIndex(for: chapterList[index].offset, in: pages))
+                                showContents = false
+                            } label: {
+                                HStack {
+                                    Text(chapterList[index].title).lineLimit(2)
+                                    Spacer()
+                                    if pages.indices.contains(currentPage), chapterList[index].offset <= pages[currentPage].offset && (index + 1 == chapterList.count || chapterList[index + 1].offset > pages[currentPage].offset) {
+                                        Image(systemName: "checkmark").foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                     .navigationTitle("目录")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showContents = false } } }
@@ -235,14 +255,15 @@ struct ReaderView: View {
         let size = library.fontSize
         do {
             let cached = documentText
-            let (text, result) = try await Task.detached(priority: .userInitiated) {
-                let text = try cached ?? BookDocumentLoader.load(url).text
-                return (text, BookPagination.pages(text, fontSize: size))
+            let (text, result, chapters) = try await Task.detached(priority: .userInitiated) {
+                let document = try cached.map { BookDocument(text: $0) } ?? BookDocumentLoader.load(url)
+                return (document.text, BookPagination.pages(document.text, fontSize: size), document.chapters)
             }.value
             guard !Task.isCancelled else { return }
             let saved = library.books.first(where: { $0.id == book.id }) ?? book
             guard !result.isEmpty else { throw BookReadError.invalid("文件没有可阅读的正文。") }
             documentText = text
+            if !chapters.isEmpty { chapterList = chapters }
             pages = result
             if let offset = saved.readingOffset {
                 currentPage = BookPagination.pageIndex(for: offset, in: pages)
