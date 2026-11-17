@@ -392,7 +392,6 @@ struct ReaderView: View {
         prefetchTask?.cancel()
         prefetchTask = nil
         paginationGeneration = UUID()
-        speech.stop(); listening = false
         loaded = false; errorMessage = nil; chapterError = nil
         chapterTask = Task { await openEPUB(layout: layout, destination: EPUBLocation(resource: resource, offset: 0)) }
     }
