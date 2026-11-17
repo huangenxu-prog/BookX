@@ -21,6 +21,13 @@ enum BookReadError: LocalizedError {
     }
 }
 
+struct EPUBResource: Codable, Sendable { let path: String }
+struct EPUBResourceIndex: Codable, Sendable {
+    let title: String
+    let author: String
+    let resources: [EPUBResource]
+}
+
 /// Reads EPUB entries in memory; archive paths are never written to disk.
 enum BookDocumentLoader {
     static func load(_ url: URL) throws -> BookDocument {
@@ -55,6 +62,59 @@ enum BookDocumentLoader {
             text = expression.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: replacement)
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Read only EPUB package metadata and its spine. No chapter XHTML is decompressed.
+    /// This is the first stage of resource-oriented, on-demand EPUB loading.
+    static func epubIndex(_ url: URL) throws -> EPUBResourceIndex {
+        let archive = try Archive(url: url, accessMode: .read)
+        func extract(_ path: String) throws -> Data {
+            guard let entry = archive[path], entry.type == .file,
+                  entry.uncompressedSize <= 4 * 1024 * 1024 else {
+                throw BookReadError.invalid("EPUB 目录文件缺失或过大。")
+            }
+            var data = Data()
+            _ = try archive.extract(entry) { data.append($0) }
+            return data
+        }
+        let container = EPUBXML()
+        try container.parse(extract("META-INF/container.xml"))
+        guard let package = container.packagePath else {
+            throw BookReadError.invalid("EPUB 未包含有效的书籍目录。")
+        }
+        let opf = EPUBXML()
+        try opf.parse(extract(package))
+        let base = URL(fileURLWithPath: "/" + package).deletingLastPathComponent()
+        let resources: [EPUBResource] = try opf.spine.compactMap { id in
+            guard let item = opf.items[id] else {
+                throw BookReadError.invalid("EPUB 阅读顺序引用了不存在的章节。")
+            }
+            guard item.type == "application/xhtml+xml" || item.type == "text/html" else { return nil }
+            let href = String(item.href.split(separator: "#", maxSplits: 1).first ?? "")
+            guard !href.contains("://"), !href.hasPrefix("/") else {
+                throw BookReadError.invalid("EPUB 章节地址无效。")
+            }
+            let path = base.appendingPathComponent(href.removingPercentEncoding ?? href)
+                .standardizedFileURL.path
+            return EPUBResource(path: String(path.dropFirst()))
+        }
+        return EPUBResourceIndex(title: opf.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                 author: opf.author.trimmingCharacters(in: .whitespacesAndNewlines),
+                                 resources: resources)
+    }
+
+    /// Extract a single spine resource without parsing the rest of the book.
+    static func epubChapter(_ url: URL, resource: EPUBResource) throws -> String {
+        let archive = try Archive(url: url, accessMode: .read)
+        guard let entry = archive[resource.path], entry.type == .file,
+              entry.uncompressedSize <= 16 * 1024 * 1024 else {
+            throw BookReadError.invalid("EPUB 章节缺失或过大。")
+        }
+        var data = Data()
+        _ = try archive.extract(entry) { data.append($0) }
+        let chapter = EPUBXML()
+        try chapter.parse(data, body: true)
+        return normalizeReadingText(chapter.bodyText)
     }
 
     private static func epub(_ url: URL) throws -> BookDocument {
