@@ -2,10 +2,16 @@ import Foundation
 import CoreFoundation
 import ZIPFoundation
 
+struct BookChapter: Sendable {
+    let title: String
+    let offset: Int
+}
+
 struct BookDocument {
     var title: String = ""
     var author: String = ""
     var text: String
+    var chapters: [BookChapter] = []
 }
 
 enum BookReadError: LocalizedError {
@@ -74,6 +80,8 @@ enum BookDocumentLoader {
         try opf.parse(read(package))
         let base = URL(fileURLWithPath: "/" + package).deletingLastPathComponent()
         var sections: [String] = []
+        var chapters: [BookChapter] = []
+        var characterOffset = 0
         for id in opf.spine {
             guard let item = opf.items[id] else {
                 throw BookReadError.invalid("EPUB 阅读顺序引用了不存在的章节。")
@@ -87,14 +95,21 @@ enum BookDocumentLoader {
             let chapter = EPUBXML()
             try chapter.parse(read(String(path.dropFirst())), body: true)
             let text = normalizeReadingText(chapter.bodyText)
-            if !text.isEmpty { sections.append(text) }
+            if !text.isEmpty {
+                let heading = chapter.heading.trimmingCharacters(in: .whitespacesAndNewlines)
+                let fallback = "第\(sections.count + 1)章"
+                chapters.append(BookChapter(title: heading.isEmpty ? fallback : String(heading.prefix(80)), offset: characterOffset))
+                if !sections.isEmpty { characterOffset += 2 }
+                sections.append(text)
+                characterOffset += text.count
+            }
         }
         guard !sections.isEmpty else {
             throw BookReadError.invalid("未找到可阅读的 EPUB 文字正文；暂不支持纯图片或加密书籍。")
         }
         return BookDocument(title: opf.title.trimmingCharacters(in: .whitespacesAndNewlines),
                             author: opf.author.trimmingCharacters(in: .whitespacesAndNewlines),
-                            text: sections.joined(separator: "\n\n"))
+                            text: sections.joined(separator: "\n\n"), chapters: chapters)
     }
 }
 
@@ -105,6 +120,8 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
     var title = ""
     var author = ""
     var bodyText = ""
+    var heading = ""
+    private var headingDepth = 0
     private var elements: [String] = []
     private var readingBody = false
     private var bodyOnly = false
@@ -144,12 +161,14 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
         }
         if name == "itemref", attributes["linear"] != "no", let id = attributes["idref"] { spine.append(id) }
         if name == "body" { readingBody = true }
+        if bodyOnly && readingBody && heading.isEmpty && ["h1", "h2", "h3"].contains(name) { headingDepth = elements.count }
         if ignoredDepth > 0 || ["script", "style", "nav"].contains(name) { ignoredDepth += 1 }
         if bodyOnly && readingBody && ignoredDepth == 0 && ["p", "div", "br", "h1", "h2", "h3", "li"].contains(name) { newline() }
     }
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         if bodyOnly {
             if readingBody && ignoredDepth == 0 {
+                if headingDepth > 0 && heading.count < 100 { heading += string }
                 bodyFragments.append(string)
                 lastWasNewline = string.hasSuffix("\n")
             }
@@ -164,6 +183,7 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
         if bodyOnly && readingBody && ignoredDepth == 0 && ["p", "div", "h1", "h2", "h3", "li"].contains(name) { newline() }
         if ignoredDepth > 0 { ignoredDepth -= 1 }
+        if headingDepth == elements.count { headingDepth = 0 }
         if name == "body" { readingBody = false }
         _ = elements.popLast()
     }
@@ -199,6 +219,13 @@ enum BookPagination {
         return result
     }
     static func pageIndex(for offset: Int, in pages: [ReadingPage]) -> Int {
-        pages.lastIndex(where: { $0.offset <= offset }) ?? 0
+        guard !pages.isEmpty else { return 0 }
+        var low = 0
+        var high = pages.count
+        while low < high {
+            let mid = low + (high - low) / 2
+            if pages[mid].offset <= offset { low = mid + 1 } else { high = mid }
+        }
+        return max(0, low - 1)
     }
 }
