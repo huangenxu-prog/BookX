@@ -51,7 +51,14 @@ struct ReaderView: View {
                 CurlPageView(pages: pages.map(\.text), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .ignoresSafeArea(edges: .vertical)
-                    .simultaneousGesture(TapGesture().onEnded { withAnimation(.easeInOut(duration: 0.2)) { menuVisible.toggle() } })
+                    .overlay(alignment: .center) {
+                        // Only the small central tap target opens the menu; page turns stay independent.
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .frame(width: 64, height: 64)
+                            .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { menuVisible.toggle() } }
+                            .accessibilityLabel("阅读菜单")
+                    }
             } else if library.pageMode == 1 {
                 TabView(selection: $currentPage) {
                     ForEach(pages.indices, id: \.self) { i in
