@@ -261,9 +261,9 @@ struct ReaderView: View {
                 let source = parsed.text as NSString
                 let target = max(0, min(source.length, savedOffset ?? Int(saved.progress * Double(source.length))))
                 // A little context before the bookmark allows backwards page turns.
-                let start = max(0, target - 3000)
+                let start = max(0, target - 800)
                 let window = source.rangeOfComposedCharacterSequences(for:
-                    NSRange(location: start, length: min(36000, source.length - start)))
+                    NSRange(location: start, length: min(8000, source.length - start)))
                 let fragment = source.substring(with: window)
                 let local = try screenPages
                     ? ScreenPagination.pages(fragment, size: textSize, fontSize: size, lineSpacing: spacing)
@@ -280,6 +280,9 @@ struct ReaderView: View {
             if partial {
                 let generation = paginationGeneration
                 paginationTask = Task {
+                    // Let the first visible pages settle before full-book background work.
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard !Task.isCancelled, generation == paginationGeneration else { return }
                     // Run the expensive complete layout off the main actor.
                     let full: [ReadingPage]?
                     do {
