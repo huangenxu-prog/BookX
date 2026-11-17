@@ -18,6 +18,7 @@ struct CurlPageView: UIViewControllerRepresentable {
             navigationOrientation: .horizontal,
             options: [UIPageViewController.OptionsKey.spineLocation: NSNumber(value: UIPageViewController.SpineLocation.min.rawValue)]
         )
+        controller.view.isDirectionalLockEnabled = true
         controller.dataSource = context.coordinator
         controller.delegate = context.coordinator
         context.coordinator.rebuild(pages: pages, fontSize: fontSize, lineSpacing: lineSpacing, ink: ink, background: background)
@@ -67,16 +68,18 @@ struct CurlPageView: UIViewControllerRepresentable {
             guard pages.indices.contains(index) else { return nil }
             if let cached = controllers[index] { return cached }
             let view = AnyView(
-                ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(pages[index])
                         .font(.system(size: fontSize))
                         .lineSpacing(lineSpacing)
                         .foregroundStyle(parent.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
-                        .padding(.top, 90)
-                        .padding(.bottom, 75)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(parent.background)
             )
             let result = IndexedPageController(index: index, view: view)
