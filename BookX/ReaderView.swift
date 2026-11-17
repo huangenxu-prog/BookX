@@ -31,7 +31,7 @@ struct ReaderView: View {
     private var ink: Color { library.paper == 3 ? .white : .black }
     // The curl controller must fill the physical screen; keep controls inside safe bounds.
     // Avoid counting the safe-area gap twice inside the full-screen curl sheet.
-    private var curlTopInset: CGFloat { max(0, screenSafeInsets.top - 40) }
+    private var curlTopInset: CGFloat { screenSafeInsets.top + 4 }
     private var curlBottomInset: CGFloat { max(0, screenSafeInsets.bottom - 12) }
     private var screenSafeInsets: UIEdgeInsets {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
