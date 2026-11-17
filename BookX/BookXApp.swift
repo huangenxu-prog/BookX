@@ -149,6 +149,7 @@ final class BookLibrary: ObservableObject {
             let url = fileURL(book)
             if fm.fileExists(atPath: url.path) { try fm.removeItem(at: url) }
             BookDocumentStore.remove(url)
+            BookPageStore.remove(url)
             books.removeAll { $0.id == book.id }
             if documentCache?.id == book.id { clearDocumentCache() }
             save()
