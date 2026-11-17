@@ -5,14 +5,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="${COSYVOICE_WORKDIR:-$ROOT/.cosyvoice3-build}"
 UPSTREAM="https://github.com/tetherto/qvac-fabric-speech.cpp.git"
+UPSTREAM_REF="54f59a02927de714c99312a0bbfdc4cb51108a98"
 command -v xcrun >/dev/null || { echo "Xcode command-line tools required" >&2; exit 1; }
 command -v cmake >/dev/null || { echo "CMake required" >&2; exit 1; }
 command -v git >/dev/null || { echo "Git required" >&2; exit 1; }
 mkdir -p "$WORK"
 if [[ ! -d "$WORK/source/.git" ]]; then
-  git clone --depth 1 "$UPSTREAM" "$WORK/source"
+  git init -q "$WORK/source"
+  git -C "$WORK/source" remote add origin "$UPSTREAM"
 fi
-echo "Upstream commit: $(git -C "$WORK/source" rev-parse HEAD)"
+git -C "$WORK/source" fetch --depth 1 origin "$UPSTREAM_REF"
+git -C "$WORK/source" checkout -q --detach FETCH_HEAD
+echo "Pinned upstream commit: $(git -C "$WORK/source" rev-parse HEAD)"
 bash "$WORK/source/engines/tts/scripts/setup-ggml.sh"
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
 cmake -S "$WORK/source/engines/tts" -B "$WORK/ios-arm64" \
