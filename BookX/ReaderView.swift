@@ -240,9 +240,13 @@ struct ReaderView: View {
             try Task.checkCancellation()
             let (parsed, result) = try await Task.detached(priority: .userInitiated) {
                 let parsed = try cached ?? BookDocumentStore.load(url)
+                if let ready = BookPageStore.load(url, key: layoutKey) {
+                    return (parsed, ready)
+                }
                 let result = try screenPages
                     ? ScreenPagination.pages(parsed.text, size: textSize, fontSize: size, lineSpacing: spacing)
                     : BookPagination.pages(parsed.text, fontSize: size)
+                BookPageStore.save(result, source: url, key: layoutKey)
                 return (parsed, result)
             }.value
             guard !Task.isCancelled else { return }
