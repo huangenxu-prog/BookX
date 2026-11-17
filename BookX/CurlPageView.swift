@@ -18,7 +18,6 @@ struct CurlPageView: UIViewControllerRepresentable {
             navigationOrientation: .horizontal,
             options: [UIPageViewController.OptionsKey.spineLocation: NSNumber(value: UIPageViewController.SpineLocation.min.rawValue)]
         )
-        controller.view.isDirectionalLockEnabled = true
         controller.dataSource = context.coordinator
         controller.delegate = context.coordinator
         context.coordinator.rebuild(pages: pages, fontSize: fontSize, lineSpacing: lineSpacing, ink: ink, background: background)
