@@ -95,6 +95,9 @@ final class BookLibrary: ObservableObject {
         lineSpacing = UserDefaults.standard.object(forKey: "lineSpacing") == nil ? 8 : UserDefaults.standard.double(forKey: "lineSpacing")
         paper = UserDefaults.standard.object(forKey: "paper") == nil ? 1 : UserDefaults.standard.integer(forKey: "paper")
         pageMode = UserDefaults.standard.object(forKey: "pageMode") == nil ? 0 : UserDefaults.standard.integer(forKey: "pageMode")
+        // Keep existing scrolling preferences; migrate the removed cover mode to horizontal paging.
+        if pageMode == 2 { pageMode = 1 }
+        if ![0, 1, 3].contains(pageMode) { pageMode = 0 }
     }
     func save() {
         progressSaveTask?.cancel()
@@ -570,7 +573,6 @@ struct SettingsView: View {
                         Picker("翻页", selection: $library.pageMode) {
                             Text("仿真翻页").tag(0)
                             Text("左右滑动").tag(1)
-                            Text("覆盖翻页").tag(2)
                             Text("上下滚动").tag(3)
                         }
                         .pickerStyle(.segmented)

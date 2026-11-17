@@ -29,47 +29,24 @@ struct ReaderView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
-                    .accessibilityLabel("返回")
-                Spacer()
-                Text(book.title).font(.subheadline).lineLimit(1).truncationMode(.tail)
-                    .frame(maxWidth: .infinity)
-                Spacer()
-                Menu {
-                    Button { showContents = true } label: {
-                        Label("目录", systemImage: "list.bullet")
-                    }.disabled(!loaded)
-                    Button { settings = true } label: {
-                        Label("排版", systemImage: "textformat.size")
-                    }
-                    if listening {
-                        Button { speech.togglePause() } label: {
-                            Label(speech.isPaused ? "继续听书" : "暂停听书", systemImage: speech.isPaused ? "play.fill" : "pause.fill")
-                        }
-                        Button { toggleListening() } label: {
-                            Label("停止听书", systemImage: "stop.fill")
-                        }
-                    } else {
-                        Button { toggleListening() } label: {
-                            Label("听书", systemImage: "headphones")
-                        }.disabled(!loaded)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis").font(.title3).frame(width: 44, height: 44)
-                }
-                .accessibilityLabel("阅读功能")
-            }.padding(.horizontal)
+            if library.pageMode != 0 { readerHeader }
+
 
             GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
             if let errorMessage {
-                ContentUnavailableView("无法阅读", systemImage: "exclamationmark.book.closed", description: Text(errorMessage))
-                Spacer()
+                VStack(spacing: 0) {
+                    if library.pageMode == 0 { readerHeader }
+                    ContentUnavailableView("无法阅读", systemImage: "exclamationmark.book.closed", description: Text(errorMessage))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else if !loaded {
-                ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    if library.pageMode == 0 { readerHeader }
+                    ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else if library.pageMode == 0 {
-                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
+                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader))
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .clipped()
             } else if library.pageMode == 1 {
@@ -79,10 +56,6 @@ struct ReaderView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-            } else if library.pageMode == 2 {
-                CoverPageView(pages: pages, currentPage: $currentPage,
-                              fontSize: library.fontSize, lineSpacing: library.lineSpacing,
-                              ink: ink, background: bg)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -106,16 +79,6 @@ struct ReaderView: View {
             }
             }
 
-            if library.pageMode == 0 {
-                Text("\(currentPage + 1) / \(pages.count)")
-                    .font(.caption)
-                    .foregroundStyle(ink.opacity(0.65))
-                    .accessibilityIdentifier("reading-position")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(bg)
-                    .opacity(loaded ? 1 : 0)
-            }
             if library.pageMode != 0 {
                 HStack {
                     Text("\(currentPage + 1) / \(pages.count)").accessibilityIdentifier("reading-position")
@@ -182,6 +145,40 @@ struct ReaderView: View {
         }
     }
 
+    private var readerHeader: some View {
+        HStack {
+                Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
+                    .accessibilityLabel("返回")
+                Spacer()
+                Text(book.title).font(.subheadline).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity)
+                Spacer()
+                Menu {
+                    Button { showContents = true } label: {
+                        Label("目录", systemImage: "list.bullet")
+                    }.disabled(!loaded)
+                    Button { settings = true } label: {
+                        Label("排版", systemImage: "textformat.size")
+                    }
+                    if listening {
+                        Button { speech.togglePause() } label: {
+                            Label(speech.isPaused ? "继续听书" : "暂停听书", systemImage: speech.isPaused ? "play.fill" : "pause.fill")
+                        }
+                        Button { toggleListening() } label: {
+                            Label("停止听书", systemImage: "stop.fill")
+                        }
+                    } else {
+                        Button { toggleListening() } label: {
+                            Label("听书", systemImage: "headphones")
+                        }.disabled(!loaded)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis").font(.title3).frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("阅读功能")
+            }.padding(.horizontal)
+    }
+
     private func toggleListening() {
         if listening {
             speech.stop()
@@ -220,8 +217,11 @@ struct ReaderView: View {
         let url = library.fileURL(book)
         let size = library.fontSize
         let spacing = library.lineSpacing
-        let screenPages = library.pageMode == 1 || library.pageMode == 2
-        let layoutKey = screenPages ? "screen-\(Int(pageSize.width))-\(Int(pageSize.height))-\(size)-\(spacing)" : "flow-\(size)"
+        let screenPages = library.pageMode == 0 || library.pageMode == 1
+        let textSize = library.pageMode == 0
+            ? CGSize(width: pageSize.width, height: pageSize.height - CurlPageView.headerHeight - CurlPageView.footerHeight)
+            : pageSize
+        let layoutKey = screenPages ? "screen-\(Int(textSize.width))-\(Int(textSize.height))-\(size)-\(spacing)" : "flow-\(size)"
         do {
             let cached = document ?? library.cachedDocument(for: book.id)
             if let cached, let ready = library.cachedPages(for: book.id, key: layoutKey) {
@@ -234,7 +234,7 @@ struct ReaderView: View {
             let (parsed, result) = try await Task.detached(priority: .userInitiated) {
                 let parsed = try cached ?? BookDocumentStore.load(url)
                 let result = try screenPages
-                    ? ScreenPagination.pages(parsed.text, size: pageSize, fontSize: size, lineSpacing: spacing)
+                    ? ScreenPagination.pages(parsed.text, size: textSize, fontSize: size, lineSpacing: spacing)
                     : BookPagination.pages(parsed.text, fontSize: size)
                 return (parsed, result)
             }.value

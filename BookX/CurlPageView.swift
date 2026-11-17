@@ -3,12 +3,16 @@ import UIKit
 
 /// UIKit's native page curl, bridged into SwiftUI.
 struct CurlPageView: UIViewControllerRepresentable {
+    static let headerHeight: CGFloat = 44
+    static let footerHeight: CGFloat = 44
+
     let pages: [ReadingPage]
     @Binding var currentPage: Int
     let fontSize: Double
     let lineSpacing: Double
     let ink: Color
     let background: Color
+    let header: AnyView
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -33,6 +37,7 @@ struct CurlPageView: UIViewControllerRepresentable {
         if coordinator.pages.count != pages.count || coordinator.fontSize != fontSize || coordinator.lineSpacing != lineSpacing {
             coordinator.rebuild(pages: pages, fontSize: fontSize, lineSpacing: lineSpacing, ink: ink, background: background)
         }
+        coordinator.refreshChrome()
         guard let target = coordinator.controller(at: currentPage),
               controller.viewControllers?.first !== target else { return }
         let old = (controller.viewControllers?.first as? IndexedPageController)?.pageIndex ?? 0
@@ -66,27 +71,41 @@ struct CurlPageView: UIViewControllerRepresentable {
         func controller(at index: Int) -> IndexedPageController? {
             guard pages.indices.contains(index) else { return nil }
             if let cached = controllers[index] { return cached }
-            let view = AnyView(
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(pages[index].text)
-                        .font(.system(size: fontSize))
-                        .lineSpacing(lineSpacing)
-                        .foregroundStyle(parent.ink)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 12)
-                        .padding(.bottom, 16)
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(parent.background)
-            )
+            let view = pageView(at: index)
             let result = IndexedPageController(index: index, view: view)
             result.view.backgroundColor = UIColor(parent.background)
             // Keep only a small neighborhood rather than thousands of hosting controllers.
             controllers = controllers.filter { abs($0.key - index) <= 3 }
             controllers[index] = result
             return result
+        }
+        private func pageView(at index: Int) -> AnyView {
+            AnyView(
+                VStack(spacing: 0) {
+                    parent.header
+                        .frame(height: CurlPageView.headerHeight)
+                    ScreenPageView(text: pages[index].text, fontSize: fontSize,
+                                   lineSpacing: lineSpacing, ink: parent.ink)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                    Text("\(index + 1) / \(pages.count)")
+                        .font(.caption)
+                        .foregroundStyle(parent.ink.opacity(0.65))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: CurlPageView.footerHeight)
+                        .accessibilityIdentifier("reading-position")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .foregroundStyle(parent.ink)
+                .background(parent.background)
+            )
+        }
+
+        // Each sheet owns its controls; refresh cached sheets when listening state changes.
+        func refreshChrome() {
+            for (index, controller) in controllers where pages.indices.contains(index) {
+                controller.rootView = pageView(at: index)
+            }
         }
         func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
             guard let page = viewController as? IndexedPageController else { return nil }
