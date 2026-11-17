@@ -1,0 +1,36 @@
+name: CosyVoice3 iOS native library (experimental)
+
+on:
+  push:
+    branches: [feature/cosyvoice3]
+    paths:
+      - scripts/build_cosyvoice3_ios.sh
+      - .github/workflows/cosyvoice3-native.yml
+  workflow_dispatch:
+
+jobs:
+  compile-ios-arm64:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+      - name: Install CMake
+        run: brew install cmake ninja
+      - name: Build CosyVoice3 native static library
+        run: bash scripts/build_cosyvoice3_ios.sh
+      - name: Inspect native artifacts
+        run: |
+          find .cosyvoice3-build/ios-arm64 -type f \( -name '*.a' -o -name '*.framework' \) -print
+          test -n "$(find .cosyvoice3-build/ios-arm64 -type f -name 'libtts-cpp.a' -print -quit)"
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosyvoice3-ios-arm64-experimental
+          path: |
+            .cosyvoice3-build/ios-arm64/**/*.a
+          if-no-files-found: error
+          retention-days: 7
