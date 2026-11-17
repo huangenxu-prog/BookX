@@ -5,6 +5,7 @@ on:
     branches: [feature/cosyvoice3]
     paths:
       - scripts/build_cosyvoice3_ios.sh
+      - scripts/check_cosyvoice3_models.py
       - Native/CosyVoice/**
       - .github/workflows/cosyvoice3-native.yml
   workflow_dispatch:
@@ -21,6 +22,20 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-path
       - name: Install CMake
         run: brew install cmake ninja
+      - name: Validate build script and offline-model preflight
+        run: |
+          bash -n scripts/build_cosyvoice3_ios.sh
+          python3 -m py_compile scripts/check_cosyvoice3_models.py
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          if python3 scripts/check_cosyvoice3_models.py "$tmp"; then
+            echo "ERROR: empty model directory unexpectedly passed" >&2
+            exit 1
+          fi
+          for f in cosyvoice3-llm-q8_0.gguf cosyvoice3-flow-f16.gguf cosyvoice3-hift-f16.gguf voice.gguf vocab.json merges.txt; do
+            printf 'test' > "$tmp/$f"
+          done
+          python3 scripts/check_cosyvoice3_models.py "$tmp"
       - name: Build CosyVoice3 native static library
         run: bash scripts/build_cosyvoice3_ios.sh
       - name: Inspect native artifacts
