@@ -296,6 +296,53 @@ enum BookPagination {
     }
 }
 
+/// Readium-style resource access: persist the spine index, then load individual XHTML
+/// resources on demand. This cache never changes the original EPUB.
+enum EPUBResourceStore {
+    private struct IndexEntry: Codable {
+        let version: Int
+        let sourceSize: Int
+        let modified: Date?
+        let index: EPUBResourceIndex
+    }
+    private static func indexURL(_ source: URL) -> URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BookXSpines", isDirectory: true)
+            .appendingPathComponent(source.lastPathComponent + ".plist")
+    }
+    private static func signature(_ source: URL) throws -> (Int, Date?) {
+        let attributes = try FileManager.default.attributesOfItem(atPath: source.path)
+        return ((attributes[.size] as? NSNumber)?.intValue ?? 0,
+                attributes[.modificationDate] as? Date)
+    }
+    static func index(_ source: URL) throws -> EPUBResourceIndex {
+        let (size, modified) = try signature(source)
+        let target = indexURL(source)
+        if let data = try? Data(contentsOf: target),
+           let cached = try? PropertyListDecoder().decode(IndexEntry.self, from: data),
+           cached.version == 1, cached.sourceSize == size, cached.modified == modified {
+            return cached.index
+        }
+        let result = try BookDocumentLoader.epubIndex(source)
+        let entry = IndexEntry(version: 1, sourceSize: size, modified: modified, index: result)
+        if let data = try? PropertyListEncoder().encode(entry) {
+            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+            try? data.write(to: target, options: .atomic)
+        }
+        return result
+    }
+    static func chapter(_ source: URL, index: EPUBResourceIndex, at position: Int) throws -> String {
+        guard index.resources.indices.contains(position) else {
+            throw BookReadError.invalid("章节位置超出 EPUB 阅读顺序。")
+        }
+        return try BookDocumentLoader.epubChapter(source, resource: index.resources[position])
+    }
+    static func remove(_ source: URL) {
+        try? FileManager.default.removeItem(at: indexURL(source))
+    }
+}
+
 /// Disposable parsed-book cache. Original files remain the source of truth.
 enum BookDocumentStore {
     // Keep large book text out of property-list decoding. The metadata is small;
