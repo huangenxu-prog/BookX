@@ -5,20 +5,43 @@ import Foundation
 enum SpeechText {
     static func segments(_ text: String, limit: Int = 80) -> [String] {
         let limit = max(16, limit)
+        let characters = Array(text)
         var result: [String] = []
-        var buffer = ""
-        var count = 0
-        for character in text {
-            buffer.append(character)
-            count += 1
-            if count >= limit || (count >= 12 && "。！？!?；;\n".contains(character)) {
-                result.append(buffer)
-                buffer = ""
-                count = 0
+        var start = 0
+        let sentenceEnds = "。！？!?；;\n"
+        let softBreaks = "，,、：:"
+        while start < characters.count {
+            let end = min(start + limit, characters.count)
+            if end == characters.count {
+                let tail = String(characters[start..<end])
+                if !tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { result.append(tail) }
+                break
             }
+            // Prefer a completed sentence. Never split just because a counter reached 80.
+            let minimum = min(start + 12, end)
+            var boundary: Int?
+            if minimum < end {
+                for index in minimum..<end where sentenceEnds.contains(characters[index]) {
+                    boundary = index + 1
+                    break
+                }
+            }
+            if boundary == nil {
+                // For long prose without a sentence terminator, pause at a clause boundary.
+                let earliest = min(start + max(12, limit / 2), end)
+                if earliest < end {
+                    for index in (earliest..<end).reversed() where softBreaks.contains(characters[index]) {
+                        boundary = index + 1
+                        break
+                    }
+                }
+            }
+            let stop = boundary ?? end
+            let segment = String(characters[start..<stop])
+            if !segment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { result.append(segment) }
+            start = stop
         }
-        if !buffer.isEmpty { result.append(buffer) }
-        return result.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return result
     }
 }
 
