@@ -13,6 +13,8 @@ struct CurlPageView: UIViewControllerRepresentable {
     let ink: Color
     let background: Color
     let header: AnyView
+    let topInset: CGFloat
+    let bottomInset: CGFloat
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -83,7 +85,8 @@ struct CurlPageView: UIViewControllerRepresentable {
             AnyView(
                 VStack(spacing: 0) {
                     parent.header
-                        .frame(height: CurlPageView.headerHeight)
+                        .padding(.top, parent.topInset)
+                        .frame(height: CurlPageView.headerHeight + parent.topInset)
                     ScreenPageView(text: pages[index].text, fontSize: fontSize,
                                    lineSpacing: lineSpacing, ink: parent.ink)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -93,6 +96,7 @@ struct CurlPageView: UIViewControllerRepresentable {
                         .foregroundStyle(parent.ink.opacity(0.65))
                         .frame(maxWidth: .infinity)
                         .frame(height: CurlPageView.footerHeight)
+                        .padding(.bottom, parent.bottomInset)
                         .accessibilityIdentifier("reading-position")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
