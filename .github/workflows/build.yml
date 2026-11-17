@@ -17,9 +17,14 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
+      - name: Prepare pinned offline Kokoro resources
+        run: python3 scripts/prepare_kokoro.py
       - name: Generate synthetic EPUB fixtures
         run: python3 scripts/make_test_epubs.py
       - name: Test book parsing and reading positions
+        env:
+          BOOKX_TTS_MODEL_DIR: ${{ github.workspace }}/Models/Kokoro
+          BOOKX_TTS_SAMPLE: ${{ github.workspace }}/speech-sample.wav
         run: |
           set -o pipefail
           swift test | tee tests.log
@@ -57,6 +62,7 @@ jobs:
         with:
           name: BookX-validation
           path: |
+            speech-sample.wav
             tests.log
             build.log
             simulator.log

@@ -137,6 +137,9 @@ struct ReaderView: View {
                 speech.stop()
             }
         }
+        .onChange(of: speech.errorMessage) { _, message in
+            if message != nil { listening = false; waitingForSpeechPage = false; spokenLocation = nil }
+        }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
         .onDisappear { chapterTask?.cancel(); prefetchTask?.cancel(); paginationTask?.cancel(); paginationGeneration = UUID(); savePosition(); library.save(); speech.stop(); listening = false }
         .sheet(isPresented: $showContents) {
@@ -168,6 +171,9 @@ struct ReaderView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .alert("听书失败", isPresented: Binding(get: { speech.errorMessage != nil }, set: { if !$0 { speech.errorMessage = nil } })) {
+            Button("知道了") { speech.errorMessage = nil }
+        } message: { Text(speech.errorMessage ?? "") }
         .alert("章节加载失败", isPresented: Binding(get: { chapterError != nil }, set: { if !$0 { chapterError = nil } })) {
             Button("重试") { chapterError = nil; prefetchChapters() }
             Button("取消", role: .cancel) { chapterError = nil }

@@ -15,3 +15,10 @@ screenshots/
 Tests/Fixtures/lazy.epub
 Tests/Fixtures/nav3.epub
 Tests/Fixtures/large.epub
+
+# Downloaded, checksum-pinned speech assets and generated build files
+Models/
+.model-cache/
+Generated/
+speech-sample.wav
+__pycache__/

@@ -5,14 +5,30 @@ packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
     from: 0.9.19
+  SherpaOnnx:
+    url: https://github.com/k2-fsa/sherpa-onnx
+    revision: af2d8d81dbfa61c4cea4c568da78f3982edca005
 targets:
   BookX:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
-    sources: [BookX]
+    sources:
+      - path: BookX
+      - path: Models/Kokoro
+        type: folder
+        buildPhase: resources
+      - path: THIRD_PARTY_NOTICES.md
+        buildPhase: resources
+    info:
+      path: Generated/Info.plist
+      properties:
+        UIBackgroundModes: [audio]
+        UILaunchScreen: {}
     dependencies:
       - package: ZIPFoundation
+      - package: SherpaOnnx
+        product: sherpa-onnx
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.huangenxu.BookX

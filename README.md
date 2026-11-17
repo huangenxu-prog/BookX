@@ -37,3 +37,13 @@ GitHub Actions 在开发分支和 main 上执行核心测试、模拟器编译�
 ## 依赖
 
 [ZIPFoundation 0.9.19](https://github.com/weichsel/ZIPFoundation)（MIT License）。
+
+## 离线 AI 听书
+
+采用 Kokoro 中文 v1.1 INT8，复用 sherpa-onnx 官方 Swift 接口（固定提交 `af2d8d81dbfa61c4cea4c568da78f3982edca005`，2.0.1）及 ONNX Runtime。默认中文女声 `zf_001`（上游 sid 3），不是苹果系统语音。模型及中文词典、数字/日期规则随 IPA 打包，安装后不联网、不上传正文、不下载模型。
+
+构建前运行 `python3 scripts/prepare_kokoro.py`。模型压缩包固定 SHA-256，下载约 147 MB，展开约 215 MB；运行内存并不等于文件大小。模型仅启动听书后加载，CPU 使用两个推理线程；每段最多 80 个字符，只保留正在播放和下一段的音频。暂停停止后续预生成，停止/退出取消任务并释放模型，切页丢弃旧音频。C 回调检查取消，但单次底层算子及模型初始化不能立即中断。支持音频后台模式和系统音频打断后手动恢复。
+
+CI 除单元测试和 iOS 编译外，在 macOS 上实际加载同一模型进行中文合成，检查有效音频并保存 `speech-sample.wav` 到验证产物。它不代替 iPhone 上的音质、耗电、暂停/恢复、锁屏、耳机拔出、跨页间隙和长时间内存测试。不会将模型故障静默降级成系统声音。
+
+模型许可证见打包资源 `Kokoro/LICENSE`；运行库由 SwiftPM 引入。上游来源及许可证保留在 `THIRD_PARTY_NOTICES.md`。
