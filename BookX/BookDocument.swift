@@ -238,7 +238,18 @@ enum BookPagination {
 
 /// Disposable parsed-book cache. Original files remain the source of truth.
 enum BookDocumentStore {
-    private struct Entry: Codable {
+    // Keep large book text out of property-list decoding. The metadata is small;
+    // the UTF-8 body can be memory-mapped by Foundation on repeated opens.
+    private struct Metadata: Codable {
+        let version: Int
+        let source: String
+        let size: Int
+        let modified: Date?
+        let title: String
+        let author: String
+        let chapters: [BookChapter]
+    }
+    private struct LegacyEntry: Codable {
         let version: Int
         let source: String
         let size: Int
@@ -250,35 +261,54 @@ enum BookDocumentStore {
             .appendingPathComponent("BookXDocuments", isDirectory: true)
         return root.appendingPathComponent(url.lastPathComponent + ".parsed")
     }
+    private static func write(_ document: BookDocument, to target: URL,
+                              source: String, size: Int, modified: Date?) {
+        let meta = Metadata(version: 2, source: source, size: size, modified: modified,
+                            title: document.title, author: document.author,
+                            chapters: document.chapters)
+        let textURL = target.appendingPathExtension("txt")
+        guard let info = try? PropertyListEncoder().encode(meta),
+              let body = document.text.data(using: .utf8) else { return }
+        try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                  withIntermediateDirectories: true)
+        // Write the text first, then publish metadata as the completion marker.
+        guard (try? body.write(to: textURL, options: .atomic)) != nil else { return }
+        try? info.write(to: target, options: .atomic)
+    }
     static func load(_ url: URL, directory: URL? = nil) throws -> BookDocument {
-        // URL.resourceValues can retain stale metadata after an atomic replacement.
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        let sourceSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
-        let sourceModified = attributes[.modificationDate] as? Date
+        let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        let modified = attributes[.modificationDate] as? Date
+        let source = url.standardizedFileURL.path
         let target = cacheURL(for: url, directory: directory)
-        if let data = try? Data(contentsOf: target),
-           let entry = try? PropertyListDecoder().decode(Entry.self, from: data),
-           entry.version == 1, entry.source == url.standardizedFileURL.path,
-           entry.size == sourceSize, entry.modified == sourceModified {
-            return entry.document
+        if let data = try? Data(contentsOf: target, options: .mappedIfSafe) {
+            if let meta = try? PropertyListDecoder().decode(Metadata.self, from: data),
+               meta.version == 2, meta.source == source, meta.size == size,
+               meta.modified == modified,
+               let body = try? Data(contentsOf: target.appendingPathExtension("txt"),
+                                    options: .mappedIfSafe),
+               let text = String(data: body, encoding: .utf8) {
+                return BookDocument(title: meta.title, author: meta.author,
+                                    text: text, chapters: meta.chapters)
+            }
+            // Transparently migrate already-imported books from the old single-blob cache.
+            if let legacy = try? PropertyListDecoder().decode(LegacyEntry.self, from: data),
+               legacy.version == 1, legacy.source == source, legacy.size == size,
+               legacy.modified == modified {
+                write(legacy.document, to: target, source: source, size: size, modified: modified)
+                return legacy.document
+            }
         }
         let document = try BookDocumentLoader.load(url)
-        let entry = Entry(version: 1, source: url.standardizedFileURL.path,
-                          size: sourceSize, modified: sourceModified, document: document)
-        let encoder = PropertyListEncoder()
-        encoder.outputFormat = .binary
-        // Cache failures must never prevent a readable book from opening.
-        if let data = try? encoder.encode(entry) {
-            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: target, options: .atomic)
-        }
+        write(document, to: target, source: source, size: size, modified: modified)
         return document
     }
     static func remove(_ url: URL) {
-        try? FileManager.default.removeItem(at: cacheURL(for: url, directory: nil))
+        let target = cacheURL(for: url, directory: nil)
+        try? FileManager.default.removeItem(at: target)
+        try? FileManager.default.removeItem(at: target.appendingPathExtension("txt"))
     }
 }
-
 
 /// Disk-backed pagination cache, keyed by the original file and exact reading geometry.
 /// A cached layout avoids repeating expensive Core Text measurement on every reopen.
