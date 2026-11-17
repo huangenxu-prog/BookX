@@ -5,6 +5,7 @@ on:
     branches: [feature/cosyvoice3]
     paths:
       - scripts/build_cosyvoice3_ios.sh
+      - Native/CosyVoice/**
       - .github/workflows/cosyvoice3-native.yml
   workflow_dispatch:
 
@@ -26,11 +27,13 @@ jobs:
         run: |
           find .cosyvoice3-build/ios-arm64 -type f \( -name '*.a' -o -name '*.framework' \) -print
           test -n "$(find .cosyvoice3-build/ios-arm64 -type f -name 'libtts-cpp.a' -print -quit)"
+          test -f .cosyvoice3-build/bridge/libbookx-cosyvoice-bridge.a
       - name: Upload native library
         uses: actions/upload-artifact@v4
         with:
           name: cosyvoice3-ios-arm64-experimental
           path: |
             .cosyvoice3-build/ios-arm64/**/*.a
+            .cosyvoice3-build/bridge/*.a
           if-no-files-found: error
           retention-days: 7
