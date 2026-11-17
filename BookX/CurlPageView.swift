@@ -3,7 +3,7 @@ import UIKit
 
 /// UIKit's native page curl, bridged into SwiftUI.
 struct CurlPageView: UIViewControllerRepresentable {
-    let pages: [String]
+    let pages: [ReadingPage]
     @Binding var currentPage: Int
     let fontSize: Double
     let lineSpacing: Double
@@ -50,13 +50,13 @@ struct CurlPageView: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         var parent: CurlPageView
-        var pages: [String] = []
+        var pages: [ReadingPage] = []
         var fontSize: Double = 0
         var lineSpacing: Double = 0
         var controllers: [Int: IndexedPageController] = [:]
         init(_ parent: CurlPageView) { self.parent = parent }
 
-        func rebuild(pages: [String], fontSize: Double, lineSpacing: Double, ink: Color, background: Color) {
+        func rebuild(pages: [ReadingPage], fontSize: Double, lineSpacing: Double, ink: Color, background: Color) {
             self.pages = pages
             self.fontSize = fontSize
             self.lineSpacing = lineSpacing
@@ -68,7 +68,7 @@ struct CurlPageView: UIViewControllerRepresentable {
             if let cached = controllers[index] { return cached }
             let view = AnyView(
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(pages[index])
+                    Text(pages[index].text)
                         .font(.system(size: fontSize))
                         .lineSpacing(lineSpacing)
                         .foregroundStyle(parent.ink)

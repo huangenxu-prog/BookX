@@ -2,7 +2,7 @@ import SwiftUI
 
 /// New page slides over the previous page rather than moving both pages together.
 struct CoverPageView: View {
-    let pages: [String]
+    let pages: [ReadingPage]
     @Binding var currentPage: Int
     let fontSize: Double
     let lineSpacing: Double
@@ -64,7 +64,7 @@ struct CoverPageView: View {
     @ViewBuilder private func page(at index: Int) -> some View {
         if pages.indices.contains(index) {
             ScrollView {
-                Text(pages[index])
+                Text(pages[index].text)
                     .font(.system(size: fontSize))
                     .lineSpacing(lineSpacing)
                     .foregroundStyle(ink)

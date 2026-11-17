@@ -98,8 +98,8 @@ enum BookDocumentLoader {
             if !text.isEmpty {
                 let heading = chapter.heading.trimmingCharacters(in: .whitespacesAndNewlines)
                 let fallback = "第\(sections.count + 1)章"
-                chapters.append(BookChapter(title: heading.isEmpty ? fallback : String(heading.prefix(80)), offset: characterOffset))
                 if !sections.isEmpty { characterOffset += 2 }
+                chapters.append(BookChapter(title: heading.isEmpty ? fallback : String(heading.prefix(80)), offset: characterOffset))
                 sections.append(text)
                 characterOffset += text.count
             }

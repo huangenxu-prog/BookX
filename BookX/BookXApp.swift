@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 import CoreFoundation
 
@@ -10,6 +11,9 @@ struct BookXApp: App {
             RootView()
                 .environmentObject(library)
                 .onOpenURL { url in Task { await library.importFiles([url]) } }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+                    library.clearDocumentCache()
+                }
         }
     }
 }
@@ -34,6 +38,16 @@ final class BookLibrary: ObservableObject {
     @Published var lineSpacing: Double = 8
     @Published var paper: Int = 1
     @Published var pageMode: Int = 0
+    private var progressSaveTask: Task<Void, Never>?
+    // Keep only the most recently parsed book. Strings/arrays share value storage.
+    private var documentCache: (id: UUID, document: BookDocument)?
+    func cachedDocument(for id: UUID) -> BookDocument? {
+        documentCache?.id == id ? documentCache?.document : nil
+    }
+    func cacheDocument(_ document: BookDocument, for id: UUID) {
+        documentCache = (id, document)
+    }
+    func clearDocumentCache() { documentCache = nil }
     private let fm = FileManager.default
     private var folder: URL { fm.urls(for: .documentDirectory, in: .userDomainMask)[0] }
     init() {
@@ -74,6 +88,8 @@ final class BookLibrary: ObservableObject {
         pageMode = UserDefaults.standard.object(forKey: "pageMode") == nil ? 0 : UserDefaults.standard.integer(forKey: "pageMode")
     }
     func save() {
+        progressSaveTask?.cancel()
+        progressSaveTask = nil
         do {
             let data = try JSONEncoder().encode(books)
             try data.write(to: folder.appendingPathComponent("library.json"), options: .atomic)
@@ -102,7 +118,9 @@ final class BookLibrary: ObservableObject {
                     let document = try await Task.detached(priority: .userInitiated) {
                         try BookDocumentLoader.load(localURL)
                     }.value
-                    books.append(BookItem(id: UUID(),
+                    let id = UUID()
+                    cacheDocument(document, for: id)
+                    books.append(BookItem(id: id,
                         title: document.title.isEmpty ? url.deletingPathExtension().lastPathComponent : document.title,
                         author: document.author, filename: name, progress: 0, lastRead: nil))
                 } catch {
@@ -119,6 +137,7 @@ final class BookLibrary: ObservableObject {
             let url = fileURL(book)
             if fm.fileExists(atPath: url.path) { try fm.removeItem(at: url) }
             books.removeAll { $0.id == book.id }
+            if documentCache?.id == book.id { clearDocumentCache() }
             save()
         } catch { importError = "删除失败：\(error.localizedDescription)" }
     }
@@ -134,7 +153,13 @@ final class BookLibrary: ObservableObject {
         books[index].readingOffset = offset
         books[index].lastRead = Date()
         books[index].hiddenFromShelf = false
-        save()
+        progressSaveTask?.cancel()
+        progressSaveTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 400_000_000) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            self?.save()
+        }
     }
 }
 

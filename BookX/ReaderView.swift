@@ -13,7 +13,7 @@ struct ReaderView: View {
     @State private var settings = false
     @State private var menuVisible = false
     @State private var showContents = false
-    @State private var documentText: String?
+    @State private var document: BookDocument?
     @State private var chapterList: [BookChapter] = []
     @StateObject private var speech = BookSpeech()
     @State private var listening = false
@@ -49,7 +49,7 @@ struct ReaderView: View {
             } else if !loaded {
                 ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if library.pageMode == 0 {
-                CurlPageView(pages: pages.map(\.text), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
+                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .ignoresSafeArea(edges: .vertical)
                     .overlay(alignment: .center) {
@@ -68,7 +68,7 @@ struct ReaderView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             } else if library.pageMode == 2 {
-                CoverPageView(pages: pages.map(\.text), currentPage: $currentPage,
+                CoverPageView(pages: pages, currentPage: $currentPage,
                               fontSize: library.fontSize, lineSpacing: library.lineSpacing,
                               ink: ink, background: bg)
             } else {
@@ -118,8 +118,8 @@ struct ReaderView: View {
                 speech.stop()
             }
         }
-        .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition() } }
-        .onDisappear { savePosition(); speech.stop(); listening = false }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
+        .onDisappear { savePosition(); library.save(); speech.stop(); listening = false }
         .overlay(alignment: .top) {
             if loaded && library.pageMode == 0 {
                 HStack {
@@ -254,16 +254,20 @@ struct ReaderView: View {
         let url = library.fileURL(book)
         let size = library.fontSize
         do {
-            let cached = documentText
-            let (text, result, chapters) = try await Task.detached(priority: .userInitiated) {
-                let document = try cached.map { BookDocument(text: $0) } ?? BookDocumentLoader.load(url)
-                return (document.text, BookPagination.pages(document.text, fontSize: size), document.chapters)
+            let cached = document ?? library.cachedDocument(for: book.id)
+            // A rapid font slider drag should not start a full-book pagination for every tick.
+            if cached != nil { try await Task.sleep(nanoseconds: 120_000_000) }
+            try Task.checkCancellation()
+            let (parsed, result) = try await Task.detached(priority: .userInitiated) {
+                let parsed = try cached ?? BookDocumentLoader.load(url)
+                return (parsed, BookPagination.pages(parsed.text, fontSize: size))
             }.value
             guard !Task.isCancelled else { return }
             let saved = library.books.first(where: { $0.id == book.id }) ?? book
             guard !result.isEmpty else { throw BookReadError.invalid("文件没有可阅读的正文。") }
-            documentText = text
-            if !chapters.isEmpty { chapterList = chapters }
+            document = parsed
+            library.cacheDocument(parsed, for: book.id)
+            chapterList = parsed.chapters
             pages = result
             if let offset = saved.readingOffset {
                 currentPage = BookPagination.pageIndex(for: offset, in: pages)

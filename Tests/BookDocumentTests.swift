@@ -21,6 +21,10 @@ final class BookDocumentTests: XCTestCase {
         let first = try XCTUnwrap(book.text.range(of: "第一章"))
         let second = try XCTUnwrap(book.text.range(of: "第二章"))
         XCTAssertLessThan(first.lowerBound, second.lowerBound)
+        XCTAssertEqual(book.chapters.count, 2)
+        XCTAssertEqual(book.chapters[1].offset, book.text.distance(from: book.text.startIndex, to: second.lowerBound))
+        let chapterStart = book.text.index(book.text.startIndex, offsetBy: book.chapters[1].offset)
+        XCTAssertTrue(book.text[chapterStart...].hasPrefix("第二章"))
     }
     func testEPUBTypographyDoesNotRequireExternalDTD() throws {
         let book = try BookDocumentLoader.load(fixture("typography.epub"))
