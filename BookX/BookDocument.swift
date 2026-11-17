@@ -198,7 +198,7 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
     }
 }
 
-struct ReadingPage {
+struct ReadingPage: Codable, Sendable {
     let offset: Int
     let text: String
 }
@@ -276,5 +276,59 @@ enum BookDocumentStore {
     }
     static func remove(_ url: URL) {
         try? FileManager.default.removeItem(at: cacheURL(for: url, directory: nil))
+    }
+}
+
+
+/// Disk-backed pagination cache, keyed by the original file and exact reading geometry.
+/// A cached layout avoids repeating expensive Core Text measurement on every reopen.
+enum BookPageStore {
+    private struct Entry: Codable {
+        let version: Int
+        let sourceSize: Int
+        let modified: Date?
+        let layoutKey: String
+        let pages: [ReadingPage]
+    }
+    private static func url(for source: URL, key: String) -> URL {
+        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BookXPages", isDirectory: true)
+        // Layout keys contain only numeric geometry, font metrics, and mode.
+        let safeKey = key.replacingOccurrences(of: "/", with: "_")
+        return root.appendingPathComponent(source.lastPathComponent + "-" + safeKey + ".plist")
+    }
+    private static func signature(_ source: URL) throws -> (Int, Date?) {
+        let attrs = try FileManager.default.attributesOfItem(atPath: source.path)
+        return ((attrs[.size] as? NSNumber)?.intValue ?? 0, attrs[.modificationDate] as? Date)
+    }
+    static func load(_ source: URL, key: String) -> [ReadingPage]? {
+        guard let signature = try? signature(source),
+              let data = try? Data(contentsOf: url(for: source, key: key)),
+              let entry = try? PropertyListDecoder().decode(Entry.self, from: data),
+              entry.version == 1, entry.sourceSize == signature.0,
+              entry.modified == signature.1, entry.layoutKey == key,
+              !entry.pages.isEmpty else { return nil }
+        return entry.pages
+    }
+    static func save(_ pages: [ReadingPage], source: URL, key: String) {
+        guard let signature = try? signature(source) else { return }
+        let entry = Entry(version: 1, sourceSize: signature.0, modified: signature.1,
+                          layoutKey: key, pages: pages)
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        guard let data = try? encoder.encode(entry) else { return }
+        let target = url(for: source, key: key)
+        try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        try? data.write(to: target, options: .atomic)
+    }
+    static func remove(_ source: URL) {
+        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BookXPages", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: root,
+                                                includingPropertiesForKeys: nil) else { return }
+        for file in entries where file.lastPathComponent.hasPrefix(source.lastPathComponent + "-") {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 }
