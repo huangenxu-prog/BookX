@@ -26,6 +26,12 @@ struct ReaderView: View {
         }
     }
     private var ink: Color { library.paper == 3 ? .white : .black }
+    // The curl controller must fill the physical screen; keep controls inside safe bounds.
+    private var screenSafeInsets: UIEdgeInsets {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.flatMap(\.windows).first(where: { $0.isKeyWindow })?.safeAreaInsets ?? .zero
+    }
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,7 +52,7 @@ struct ReaderView: View {
                     ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else if library.pageMode == 0 {
-                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader))
+                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: screenSafeInsets.top, bottomInset: screenSafeInsets.bottom)
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .clipped()
             } else if library.pageMode == 1 {
@@ -93,6 +99,7 @@ struct ReaderView: View {
             }
         }
         .foregroundStyle(ink)
+        .ignoresSafeArea(edges: library.pageMode == 0 ? .vertical : [])
         .background(bg.ignoresSafeArea())
         .preferredColorScheme(library.paper == 3 ? .dark : .light)
         .onChange(of: currentPage) { _, _ in
@@ -219,7 +226,7 @@ struct ReaderView: View {
         let spacing = library.lineSpacing
         let screenPages = library.pageMode == 0 || library.pageMode == 1
         let textSize = library.pageMode == 0
-            ? CGSize(width: pageSize.width, height: pageSize.height - CurlPageView.headerHeight - CurlPageView.footerHeight)
+            ? CGSize(width: pageSize.width, height: pageSize.height - CurlPageView.headerHeight - CurlPageView.footerHeight - screenSafeInsets.top - screenSafeInsets.bottom)
             : pageSize
         let layoutKey = screenPages ? "screen-\(Int(textSize.width))-\(Int(textSize.height))-\(size)-\(spacing)" : "flow-\(size)"
         do {
