@@ -15,6 +15,8 @@ struct CurlPageView: UIViewControllerRepresentable {
     let header: AnyView
     let topInset: CGFloat
     let bottomInset: CGFloat
+    let contentID: UUID
+    let positionLabels: [String]
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -35,15 +37,7 @@ struct CurlPageView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: UIPageViewController, context: Context) {
         let coordinator = context.coordinator
-        coordinator.parent = self
-        if coordinator.pages.count != pages.count || coordinator.fontSize != fontSize || coordinator.lineSpacing != lineSpacing {
-            coordinator.rebuild(pages: pages, fontSize: fontSize, lineSpacing: lineSpacing, ink: ink, background: background)
-        }
-        coordinator.refreshChrome()
-        guard let target = coordinator.controller(at: currentPage),
-              controller.viewControllers?.first !== target else { return }
-        let old = (controller.viewControllers?.first as? IndexedPageController)?.pageIndex ?? 0
-        controller.setViewControllers([target], direction: currentPage >= old ? .forward : .reverse, animated: false)
+        coordinator.apply(self, to: controller)
     }
 
     final class IndexedPageController: UIHostingController<AnyView> {
@@ -58,12 +52,30 @@ struct CurlPageView: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         var parent: CurlPageView
         var pages: [ReadingPage] = []
+        var transitioning = false
+        var pendingParent: CurlPageView?
+        var contentID: UUID?
         var fontSize: Double = 0
         var lineSpacing: Double = 0
         var controllers: [Int: IndexedPageController] = [:]
         init(_ parent: CurlPageView) { self.parent = parent }
 
+        func apply(_ next: CurlPageView, to controller: UIPageViewController) {
+            // Do not swap UIKit's data source under an interactive curl. Resolve the
+            // completed sheet by its resource/offset after the gesture finishes.
+            guard !transitioning else { pendingParent = next; return }
+            parent = next
+            if contentID != next.contentID || pages.count != next.pages.count || fontSize != next.fontSize || lineSpacing != next.lineSpacing {
+                rebuild(pages: next.pages, fontSize: next.fontSize, lineSpacing: next.lineSpacing, ink: next.ink, background: next.background)
+            }
+            refreshChrome()
+            guard let target = self.controller(at: parent.currentPage), controller.viewControllers?.first !== target else { return }
+            let old = (controller.viewControllers?.first as? IndexedPageController)?.pageIndex ?? 0
+            controller.setViewControllers([target], direction: parent.currentPage >= old ? .forward : .reverse, animated: false)
+        }
+
         func rebuild(pages: [ReadingPage], fontSize: Double, lineSpacing: Double, ink: Color, background: Color) {
+            self.contentID = parent.contentID
             self.pages = pages
             self.fontSize = fontSize
             self.lineSpacing = lineSpacing
@@ -91,7 +103,7 @@ struct CurlPageView: UIViewControllerRepresentable {
                                    lineSpacing: lineSpacing, ink: parent.ink)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
-                    Text("\(index + 1) / \(pages.count)")
+                    Text(parent.positionLabels.indices.contains(index) ? parent.positionLabels[index] : "")
                         .font(.caption)
                         .foregroundStyle(parent.ink.opacity(0.65))
                         .frame(maxWidth: .infinity)
@@ -122,9 +134,20 @@ struct CurlPageView: UIViewControllerRepresentable {
             guard let page = viewController as? IndexedPageController else { return nil }
             return controller(at: page.pageIndex + 1)
         }
+        func pageViewController(_ pageViewController: UIPageViewController, willTransitionTo pendingViewControllers: [UIViewController]) {
+            transitioning = true
+        }
         func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
-            guard completed, let page = pageViewController.viewControllers?.first as? IndexedPageController else { return }
-            parent.currentPage = page.pageIndex
+            let displayedIndex = (pageViewController.viewControllers?.first as? IndexedPageController)?.pageIndex
+            let displayed = displayedIndex.flatMap { pages.indices.contains($0) ? pages[$0] : nil }
+            transitioning = false
+            parent = pendingParent ?? parent
+            pendingParent = nil
+            if completed, let displayed,
+               let restored = parent.pages.firstIndex(where: { $0.location == displayed.location }) {
+                parent.currentPage = restored
+            }
+            apply(parent, to: pageViewController)
         }
     }
 }

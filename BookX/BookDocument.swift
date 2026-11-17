@@ -1,6 +1,7 @@
 import Foundation
 import CoreFoundation
 import ZIPFoundation
+import CryptoKit
 
 struct BookChapter: Codable, Sendable {
     let title: String
@@ -21,7 +22,7 @@ enum BookReadError: LocalizedError {
     }
 }
 
-struct EPUBResource: Codable, Sendable { let path: String }
+struct EPUBResource: Codable, Sendable { let path: String; var title: String? = nil }
 struct EPUBResourceIndex: Codable, Sendable {
     let title: String
     let author: String
@@ -74,7 +75,7 @@ enum BookDocumentLoader {
                 throw BookReadError.invalid("EPUB 目录文件缺失或过大。")
             }
             var data = Data()
-            _ = try archive.extract(entry) { data.append($0) }
+            _ = try archive.extract(entry) { try Task.checkCancellation(); data.append($0) }
             return data
         }
         let container = EPUBXML()
@@ -85,6 +86,18 @@ enum BookDocumentLoader {
         let opf = EPUBXML()
         try opf.parse(extract(package))
         let base = URL(fileURLWithPath: "/" + package).deletingLastPathComponent()
+        var names: [String: String] = [:]
+        if let nav = opf.navigationPath ?? opf.items.values.first(where: { $0.type == "application/x-dtbncx+xml" })?.href {
+            let navURL = base.appendingPathComponent(nav.removingPercentEncoding ?? nav).standardizedFileURL
+            let navigator = EPUBXML()
+            if let bytes = try? extract(String(navURL.path.dropFirst())), (try? navigator.parse(bytes)) != nil {
+                for (href, title) in navigator.navigationTitles {
+                    let relative = String(href.split(separator: "#", maxSplits: 1).first ?? "")
+                    let path = navURL.deletingLastPathComponent().appendingPathComponent(relative.removingPercentEncoding ?? relative).standardizedFileURL.path
+                    if names[String(path.dropFirst())] == nil { names[String(path.dropFirst())] = title }
+                }
+            }
+        }
         let resources: [EPUBResource] = try opf.spine.compactMap { id in
             guard let item = opf.items[id] else {
                 throw BookReadError.invalid("EPUB 阅读顺序引用了不存在的章节。")
@@ -96,8 +109,9 @@ enum BookDocumentLoader {
             }
             let path = base.appendingPathComponent(href.removingPercentEncoding ?? href)
                 .standardizedFileURL.path
-            return EPUBResource(path: String(path.dropFirst()))
+            return EPUBResource(path: String(path.dropFirst()), title: names[String(path.dropFirst())])
         }
+        guard !resources.isEmpty else { throw BookReadError.invalid("EPUB 没有可阅读的文字章节。") }
         return EPUBResourceIndex(title: opf.title.trimmingCharacters(in: .whitespacesAndNewlines),
                                  author: opf.author.trimmingCharacters(in: .whitespacesAndNewlines),
                                  resources: resources)
@@ -111,7 +125,7 @@ enum BookDocumentLoader {
             throw BookReadError.invalid("EPUB 章节缺失或过大。")
         }
         var data = Data()
-        _ = try archive.extract(entry) { data.append($0) }
+        _ = try archive.extract(entry) { try Task.checkCancellation(); data.append($0) }
         let chapter = EPUBXML()
         try chapter.parse(data, body: true)
         return normalizeReadingText(chapter.bodyText)
@@ -167,7 +181,7 @@ enum BookDocumentLoader {
                 if !sections.isEmpty { characterOffset += 2 }
                 chapters.append(BookChapter(title: heading.isEmpty ? fallback : String(heading.prefix(80)), offset: characterOffset))
                 sections.append(text)
-                characterOffset += text.count
+                characterOffset += text.utf16.count
             }
         }
         guard !sections.isEmpty else {
@@ -187,6 +201,11 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
     var author = ""
     var bodyText = ""
     var heading = ""
+    var navigationPath: String?
+    var navigationTitles: [(String, String)] = []
+    private var navPoints: [(href: String, title: String)] = []
+    private var anchorHref: String?
+    private var anchorText = ""
     private var headingDepth = 0
     private var elements: [String] = []
     private var readingBody = false
@@ -196,6 +215,7 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
     private var lastWasNewline = false
 
     func parse(_ data: Data, body: Bool = false) throws {
+        try Task.checkCancellation()
         bodyOnly = body
         // EPUB XHTML often uses HTML entities from an external DTD. Resolve the
         // common typography locally, without fetching external resources.
@@ -214,13 +234,22 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
         parser.shouldProcessNamespaces = true
         parser.shouldResolveExternalEntities = false
         parser.delegate = self
-        guard parser.parse() else {
+        let succeeded = parser.parse()
+        try Task.checkCancellation()
+        guard succeeded else {
             throw BookReadError.invalid("EPUB 目录或章节格式损坏，无法读取。")
         }
         if bodyOnly { bodyText = bodyFragments.joined() }
     }
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String]) {
+        if Task.isCancelled { parser.abortParsing(); return }
         elements.append(name)
+        if !bodyOnly {
+            if name == "item", attributes["properties"]?.split(separator: " ").contains("nav") == true { navigationPath = attributes["href"] }
+            if name == "navPoint" { navPoints.append(("", "")) }
+            if name == "content", let href = attributes["src"], !navPoints.isEmpty { navPoints[navPoints.count - 1].href = href }
+            if name == "a" { anchorHref = attributes["href"]; anchorText = "" }
+        }
         if name == "rootfile", packagePath == nil { packagePath = attributes["full-path"] }
         if name == "item", let id = attributes["id"], let href = attributes["href"] {
             items[id] = (href, attributes["media-type"] ?? "")
@@ -232,6 +261,11 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
         if bodyOnly && readingBody && ignoredDepth == 0 && ["p", "div", "br", "h1", "h2", "h3", "li"].contains(name) { newline() }
     }
     func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if Task.isCancelled { parser.abortParsing(); return }
+        if !bodyOnly {
+            if !navPoints.isEmpty && elements.contains("navLabel") { navPoints[navPoints.count - 1].title += string }
+            if anchorHref != nil { anchorText += string }
+        }
         if bodyOnly {
             if readingBody && ignoredDepth == 0 {
                 if headingDepth > 0 && heading.count < 100 { heading += string }
@@ -247,6 +281,15 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
         if let text = String(data: CDATABlock, encoding: .utf8) { self.parser(parser, foundCharacters: text) }
     }
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        if !bodyOnly {
+            if name == "navPoint", let item = navPoints.popLast(), !item.href.isEmpty {
+                navigationTitles.append((item.href, item.title.trimmingCharacters(in: .whitespacesAndNewlines)))
+            }
+            if name == "a", let href = anchorHref {
+                navigationTitles.append((href, anchorText.trimmingCharacters(in: .whitespacesAndNewlines)))
+                anchorHref = nil
+            }
+        }
         if bodyOnly && readingBody && ignoredDepth == 0 && ["p", "div", "h1", "h2", "h3", "li"].contains(name) { newline() }
         if ignoredDepth > 0 { ignoredDepth -= 1 }
         if headingDepth == elements.count { headingDepth = 0 }
@@ -261,6 +304,7 @@ private final class EPUBXML: NSObject, XMLParserDelegate {
 struct ReadingPage: Codable, Sendable {
     let offset: Int
     let text: String
+    var resourceIndex: Int? = nil
 }
 
 enum BookPagination {
@@ -270,6 +314,7 @@ enum BookPagination {
         var start = text.startIndex
         var offset = 0
         while start < text.endIndex {
+            if Task.isCancelled { return [] }
             let target = text.index(start, offsetBy: length, limitedBy: text.endIndex) ?? text.endIndex
             var end = target
             if target != text.endIndex,
@@ -279,7 +324,7 @@ enum BookPagination {
             }
             let page = String(text[start..<end])
             result.append(ReadingPage(offset: offset, text: page))
-            offset += page.count
+            offset += page.utf16.count
             start = end
         }
         return result
@@ -303,12 +348,21 @@ enum EPUBResourceStore {
         let version: Int
         let sourceSize: Int
         let modified: Date?
+        let source: String
         let index: EPUBResourceIndex
+    }
+    private static func key(_ source: URL) -> String {
+        SHA256.hash(data: Data(source.standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+    private struct ChapterEntry: Codable {
+        let version: Int
+        let identity: String
+        let text: String
     }
     private static func indexURL(_ source: URL) -> URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("BookXSpines", isDirectory: true)
-            .appendingPathComponent(source.lastPathComponent + ".plist")
+            .appendingPathComponent(key(source) + ".plist")
     }
     private static func signature(_ source: URL) throws -> (Int, Date?) {
         let attributes = try FileManager.default.attributesOfItem(atPath: source.path)
@@ -316,15 +370,16 @@ enum EPUBResourceStore {
                 attributes[.modificationDate] as? Date)
     }
     static func index(_ source: URL) throws -> EPUBResourceIndex {
+        try Task.checkCancellation()
         let (size, modified) = try signature(source)
         let target = indexURL(source)
         if let data = try? Data(contentsOf: target),
            let cached = try? PropertyListDecoder().decode(IndexEntry.self, from: data),
-           cached.version == 1, cached.sourceSize == size, cached.modified == modified {
+           cached.version == 3, cached.source == source.standardizedFileURL.path, cached.sourceSize == size, cached.modified == modified {
             return cached.index
         }
         let result = try BookDocumentLoader.epubIndex(source)
-        let entry = IndexEntry(version: 1, sourceSize: size, modified: modified, index: result)
+        let entry = IndexEntry(version: 3, sourceSize: size, modified: modified, source: source.standardizedFileURL.path, index: result)
         if let data = try? PropertyListEncoder().encode(entry) {
             try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
                                                      withIntermediateDirectories: true)
@@ -335,8 +390,8 @@ enum EPUBResourceStore {
     private static func chapterURL(_ source: URL, position: Int) -> URL {
         let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("BookXChapters", isDirectory: true)
-            .appendingPathComponent(source.lastPathComponent, isDirectory: true)
-        return root.appendingPathComponent("\(position).txt")
+            .appendingPathComponent(key(source), isDirectory: true)
+        return root.appendingPathComponent("\(position).plist")
     }
     static func chapter(_ source: URL, index: EPUBResourceIndex, at position: Int) throws -> String {
         guard index.resources.indices.contains(position) else {
@@ -344,20 +399,19 @@ enum EPUBResourceStore {
         }
         try Task.checkCancellation()
         let target = chapterURL(source, position: position)
-        if let sourceAttributes = try? FileManager.default.attributesOfItem(atPath: source.path),
-           let cacheAttributes = try? FileManager.default.attributesOfItem(atPath: target.path),
-           let sourceDate = sourceAttributes[.modificationDate] as? Date,
-           let cacheDate = cacheAttributes[.modificationDate] as? Date,
-           cacheDate >= sourceDate,
-           let data = try? Data(contentsOf: target, options: .mappedIfSafe),
-           let text = String(data: data, encoding: .utf8) {
-            return text
-        }
+        let stamp = try signature(source)
+        let identity = source.standardizedFileURL.path + "|\(stamp.0)|\(stamp.1?.timeIntervalSince1970 ?? 0)|" + index.resources[position].path
+        if let data = try? Data(contentsOf: target),
+           let cached = try? PropertyListDecoder().decode(ChapterEntry.self, from: data),
+           cached.version == 1, cached.identity == identity { return cached.text }
         let text = try BookDocumentLoader.epubChapter(source, resource: index.resources[position])
         try Task.checkCancellation()
-        if let data = text.data(using: .utf8) {
-            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
-                                                     withIntermediateDirectories: true)
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        if let data = try? encoder.encode(ChapterEntry(version: 1, identity: identity, text: text)) {
+            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Publish payload and source identity in one atomic write; concurrent readers
+            // can never observe a new marker beside an old chapter body.
             try? data.write(to: target, options: .atomic)
         }
         return text
@@ -395,7 +449,7 @@ enum BookDocumentStore {
     }
     private static func write(_ document: BookDocument, to target: URL,
                               source: String, size: Int, modified: Date?) {
-        let meta = Metadata(version: 2, source: source, size: size, modified: modified,
+        let meta = Metadata(version: 3, source: source, size: size, modified: modified,
                             title: document.title, author: document.author,
                             chapters: document.chapters)
         let textURL = target.appendingPathExtension("txt")
@@ -415,7 +469,7 @@ enum BookDocumentStore {
         let target = cacheURL(for: url, directory: directory)
         if let data = try? Data(contentsOf: target, options: .mappedIfSafe) {
             if let meta = try? PropertyListDecoder().decode(Metadata.self, from: data),
-               meta.version == 2, meta.source == source, meta.size == size,
+               meta.version == 3, meta.source == source, meta.size == size,
                meta.modified == modified,
                let body = try? Data(contentsOf: target.appendingPathExtension("txt"),
                                     options: .mappedIfSafe),
@@ -434,6 +488,15 @@ enum BookDocumentStore {
         let document = try BookDocumentLoader.load(url)
         write(document, to: target, source: source, size: size, modified: modified)
         return document
+    }
+    static func cachedChapters(_ url: URL) -> [BookChapter]? {
+        guard let data = try? Data(contentsOf: cacheURL(for: url, directory: nil)),
+              let meta = try? PropertyListDecoder().decode(Metadata.self, from: data),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              meta.version == 3, meta.source == url.standardizedFileURL.path,
+              meta.size == (attributes[.size] as? NSNumber)?.intValue,
+              meta.modified == (attributes[.modificationDate] as? Date) else { return nil }
+        return meta.chapters
     }
     static func remove(_ url: URL) {
         let target = cacheURL(for: url, directory: nil)
@@ -467,14 +530,14 @@ enum BookPageStore {
         guard let signature = try? signature(source),
               let data = try? Data(contentsOf: url(for: source, key: key)),
               let entry = try? PropertyListDecoder().decode(Entry.self, from: data),
-              entry.version == 1, entry.sourceSize == signature.0,
+              entry.version == 2, entry.sourceSize == signature.0,
               entry.modified == signature.1, entry.layoutKey == key,
               !entry.pages.isEmpty else { return nil }
         return entry.pages
     }
     static func save(_ pages: [ReadingPage], source: URL, key: String) {
         guard let signature = try? signature(source) else { return }
-        let entry = Entry(version: 1, sourceSize: signature.0, modified: signature.1,
+        let entry = Entry(version: 2, sourceSize: signature.0, modified: signature.1,
                           layoutKey: key, pages: pages)
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary

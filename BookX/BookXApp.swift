@@ -18,16 +18,6 @@ struct BookXApp: App {
     }
 }
 
-struct BookItem: Identifiable, Codable {
-    var id: UUID
-    var title: String
-    var author: String
-    var filename: String
-    var progress: Double
-    var lastRead: Date?
-    var readingOffset: Int?
-    var hiddenFromShelf: Bool?
-}
 
 @MainActor
 final class BookLibrary: ObservableObject {
@@ -119,6 +109,7 @@ final class BookLibrary: ObservableObject {
         defer { importing = false }
         var failures: [String] = []
         for url in urls {
+            if Task.isCancelled { break }
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             guard ["txt", "epub"].contains(url.pathExtension.lowercased()) else { continue }
@@ -127,16 +118,22 @@ final class BookLibrary: ObservableObject {
                 try fm.copyItem(at: url, to: folder.appendingPathComponent(name))
                 let localURL = folder.appendingPathComponent(name)
                 do {
-                    let document = try await Task.detached(priority: .userInitiated) {
-                        try BookDocumentStore.load(localURL)
-                    }.value
+                    let document = try await readerWorker {
+                        if localURL.pathExtension.lowercased() == "epub" {
+                            let index = try EPUBResourceStore.index(localURL)
+                            return BookDocument(title: index.title, author: index.author, text: "")
+                        }
+                        return try BookDocumentStore.load(localURL)
+                    }
                     let id = UUID()
-                    cacheDocument(document, for: id)
+                    if localURL.pathExtension.lowercased() != "epub" { cacheDocument(document, for: id) }
                     books.append(BookItem(id: id,
                         title: document.title.isEmpty ? url.deletingPathExtension().lastPathComponent : document.title,
                         author: document.author, filename: name, progress: 0, lastRead: nil))
                 } catch {
                     try? fm.removeItem(at: localURL)
+                    EPUBResourceStore.remove(localURL)
+                    BookDocumentStore.remove(localURL)
                     throw error
                 }
             } catch { failures.append("\(url.lastPathComponent)：\(error.localizedDescription)") }
@@ -162,10 +159,11 @@ final class BookLibrary: ObservableObject {
         save()
     }
     func fileURL(_ book: BookItem) -> URL { folder.appendingPathComponent(book.filename) }
-    func updateProgress(_ id: UUID, _ value: Double, offset: Int) {
+    func updateProgress(_ id: UUID, _ value: Double, offset: Int, epubLocation: EPUBLocation? = nil) {
         guard let index = books.firstIndex(where: { $0.id == id }) else { return }
         books[index].progress = min(1, max(0, value))
         books[index].readingOffset = offset
+        books[index].epubLocation = epubLocation
         books[index].lastRead = Date()
         books[index].hiddenFromShelf = false
         progressSaveTask?.cancel()

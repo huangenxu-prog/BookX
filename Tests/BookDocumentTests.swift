@@ -45,7 +45,7 @@ final class BookDocumentTests: XCTestCase {
         let offset = small[3].offset
         let resumed = BookPagination.pageIndex(for: offset, in: large)
         XCTAssertLessThanOrEqual(large[resumed].offset, offset)
-        XCTAssertGreaterThan(large[resumed].offset + large[resumed].text.count, offset)
+        XCTAssertGreaterThan(large[resumed].offset + large[resumed].text.utf16.count, offset)
         XCTAssertTrue(BookPagination.pages("", fontSize: 19).isEmpty)
     }
 }
@@ -67,7 +67,7 @@ extension BookDocumentTests {
                     let rect = CGRect(x: 0, y: 0, width: size.width - 48, height: size.height - 40)
                     let frame = ScreenPagination.frame(ScreenPagination.attributed(page.text, fontSize: font, lineSpacing: 8), rect: rect)
                     XCTAssertEqual(CTFrameGetVisibleStringRange(frame).length, (page.text as NSString).length)
-                    offset += page.text.count
+                    offset += page.text.utf16.count
                 }
             }
         }

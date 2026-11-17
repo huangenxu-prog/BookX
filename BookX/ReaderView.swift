@@ -7,7 +7,7 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var pages: [ReadingPage] = []
     @State private var currentPage = 0
-    @State private var visiblePage: Int?
+    @State private var visibleLocation: EPUBLocation?
     @State private var errorMessage: String?
     @State private var loaded = false
     @State private var settings = false
@@ -19,6 +19,16 @@ struct ReaderView: View {
     @State private var paginationTask: Task<Void, Never>?
     @State private var paginationGeneration = UUID()
     @State private var isPreviewPagination = false
+    @State private var epubIndex: EPUBResourceIndex?
+    @State private var epubWindow: [Int: EPUBChapterPages] = [:]
+    @State private var epubLayout: ReadingLayout?
+    @State private var chapterTask: Task<Void, Never>?
+    @State private var prefetchTask: Task<Void, Never>?
+    @State private var chapterError: String?
+    @State private var waitingForSpeechPage = false
+    @State private var spokenLocation: EPUBLocation?
+    @State private var resolvedNeighbors: [Int: Set<Int>] = [:]
+    @State private var windowRevision = UUID()
 
     private var bg: Color {
         switch library.paper {
@@ -58,7 +68,7 @@ struct ReaderView: View {
                     ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else if library.pageMode == 0 {
-                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset)
+                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset, contentID: windowRevision, positionLabels: pages.indices.map(positionLabel))
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .clipped()
             } else if library.pageMode == 1 {
@@ -71,17 +81,17 @@ struct ReaderView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(pages.indices, id: \.self) { i in
-                            pageText(i).id(i)
+                        ForEach(pages, id: \.location) { page in
+                            pageText(page.text).id(page.location)
                         }
                     }
                     .scrollTargetLayout()
                     .padding(.vertical, 20)
                 }
-                .scrollPosition(id: $visiblePage, anchor: .top)
-                .onAppear { visiblePage = currentPage }
-                .onChange(of: visiblePage) { _, page in
-                    if let page, pages.indices.contains(page) { currentPage = page }
+                .scrollPosition(id: $visibleLocation, anchor: .top)
+                .onAppear { if pages.indices.contains(currentPage) { visibleLocation = pages[currentPage].location } }
+                .onChange(of: visibleLocation) { _, location in
+                    if let page = pages.firstIndex(where: { $0.location == location }) { currentPage = page }
                 }
             }
 
@@ -93,7 +103,7 @@ struct ReaderView: View {
 
             if library.pageMode != 0 {
                 HStack {
-                    Text("\(currentPage + 1) / \(pages.count)").accessibilityIdentifier("reading-position")
+                    Text(positionLabel(currentPage)).accessibilityIdentifier("reading-position")
                     Spacer()
                     Button { move(to: currentPage - 1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
                         .disabled(currentPage == 0).accessibilityLabel("上一页")
@@ -108,23 +118,27 @@ struct ReaderView: View {
         .ignoresSafeArea(edges: library.pageMode == 0 ? .vertical : [])
         .background(bg.ignoresSafeArea())
         .preferredColorScheme(library.paper == 3 ? .dark : .light)
-        .onChange(of: currentPage) { _, _ in
+        .onChange(of: currentLocation) { _, _ in
             savePosition()
+            if epubIndex != nil { prefetchChapters() }
             if listening && pages.indices.contains(currentPage) {
-                speech.play(pages[currentPage].text, page: currentPage)
+                playCurrentPage()
             }
         }
         .onChange(of: speech.finishedPage) { _, page in
-            guard listening, let page, page == currentPage else { return }
-            if pages.indices.contains(page + 1) {
-                move(to: page + 1)
+            guard listening, let page, epubIndex != nil || page == currentPage else { return }
+            if pages.indices.contains(currentPage + 1) {
+                move(to: currentPage + 1)
+            } else if epubIndex != nil {
+                waitingForSpeechPage = true
+                prefetchChapters()
             } else {
                 listening = false
                 speech.stop()
             }
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
-        .onDisappear { paginationTask?.cancel(); paginationGeneration = UUID(); savePosition(); library.save(); speech.stop(); listening = false }
+        .onDisappear { chapterTask?.cancel(); prefetchTask?.cancel(); paginationTask?.cancel(); paginationGeneration = UUID(); savePosition(); library.save(); speech.stop(); listening = false }
         .sheet(isPresented: $showContents) {
             NavigationStack {
                 Group {
@@ -133,13 +147,14 @@ struct ReaderView: View {
                     } else {
                         List(chapterList.indices, id: \.self) { index in
                             Button {
-                                move(to: BookPagination.pageIndex(for: chapterList[index].offset, in: pages))
+                                if epubIndex != nil { jumpToChapter(index) }
+                                else { move(to: BookPagination.pageIndex(for: chapterList[index].offset, in: pages)) }
                                 showContents = false
                             } label: {
                                 HStack {
                                     Text(chapterList[index].title).lineLimit(2)
                                     Spacer()
-                                    if pages.indices.contains(currentPage), chapterList[index].offset <= pages[currentPage].offset && (index + 1 == chapterList.count || chapterList[index + 1].offset > pages[currentPage].offset) {
+                                    if isCurrentChapter(index) {
                                         Image(systemName: "checkmark").foregroundStyle(.secondary)
                                     }
                                 }
@@ -153,6 +168,10 @@ struct ReaderView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .alert("章节加载失败", isPresented: Binding(get: { chapterError != nil }, set: { if !$0 { chapterError = nil } })) {
+            Button("重试") { chapterError = nil; prefetchChapters() }
+            Button("取消", role: .cancel) { chapterError = nil }
+        } message: { Text(chapterError ?? "") }
         .sheet(isPresented: $settings) {
             SettingsView().environmentObject(library).presentationDetents([.medium, .large])
         }
@@ -196,14 +215,25 @@ struct ReaderView: View {
         if listening {
             speech.stop()
             listening = false
+            waitingForSpeechPage = false
         } else if loaded && pages.indices.contains(currentPage) {
             listening = true
-            speech.play(pages[currentPage].text, page: currentPage)
+            spokenLocation = nil
+            playCurrentPage()
         }
     }
 
-    private func pageText(_ index: Int) -> some View {
-        Text(pages[index].text)
+    private func playCurrentPage() {
+        guard pages.indices.contains(currentPage) else { return }
+        let page = pages[currentPage]
+        let location = EPUBLocation(resource: page.resourceIndex ?? -1, offset: page.offset)
+        guard spokenLocation != location else { return }
+        spokenLocation = location
+        speech.play(page.text, page: currentPage)
+    }
+
+    private func pageText(_ text: String) -> some View {
+        Text(text)
             .font(.system(size: library.fontSize))
             .lineSpacing(library.lineSpacing)
             .foregroundStyle(ink)
@@ -212,26 +242,42 @@ struct ReaderView: View {
     }
     private func move(to index: Int) {
         let next = max(0, min(pages.count - 1, index))
-        if library.pageMode == 3 { visiblePage = next }
+        if library.pageMode == 3, pages.indices.contains(next) { visibleLocation = pages[next].location }
         currentPage = next
+    }
+    private var currentLocation: EPUBLocation? {
+        pages.indices.contains(currentPage) ? pages[currentPage].location : nil
     }
     private func savePosition() {
         guard loaded, errorMessage == nil, pages.indices.contains(currentPage) else { return }
         let absoluteOffset = pages[currentPage].offset
-        let fraction = document.map { Double(absoluteOffset) / Double(max(1, $0.text.count)) }
+        if let index = epubIndex, let resource = pages[currentPage].resourceIndex {
+            let length = max(1, epubWindow[resource]?.length ?? 1)
+            let fraction = (Double(resource) + Double(absoluteOffset) / Double(length)) / Double(max(1, index.resources.count))
+            library.updateProgress(book.id, fraction, offset: absoluteOffset,
+                                   epubLocation: EPUBLocation(resource: resource, offset: absoluteOffset))
+            return
+        }
+        let fraction = document.map { Double(absoluteOffset) / Double(max(1, $0.text.utf16.count)) }
             ?? Double(currentPage) / Double(max(1, pages.count - 1))
         library.updateProgress(book.id, fraction, offset: absoluteOffset)
     }
     private func loadText(pageSize: CGSize) async {
         guard pageSize.width > 48, pageSize.height > 40 else { return }
+        chapterTask?.cancel()
+        prefetchTask?.cancel()
+        prefetchTask = nil
         paginationTask?.cancel()
         paginationTask = nil
         paginationGeneration = UUID()
         speech.stop()
         listening = false
+        spokenLocation = nil
+        waitingForSpeechPage = false
         savePosition()
         loaded = false
         errorMessage = nil
+        chapterError = nil
         let url = library.fileURL(book)
         let size = library.fontSize
         let spacing = library.lineSpacing
@@ -240,6 +286,11 @@ struct ReaderView: View {
             ? CGSize(width: pageSize.width, height: pageSize.height - CurlPageView.headerHeight - CurlPageView.footerHeight - curlTopInset - curlBottomInset)
             : pageSize
         let layoutKey = screenPages ? "screen-\(Int(textSize.width))-\(Int(textSize.height))-\(size)-\(spacing)" : "flow-\(size)"
+        if url.pathExtension.lowercased() == "epub" {
+            let layout = ReadingLayout(size: textSize, font: size, spacing: spacing, paged: screenPages)
+            await openEPUB(layout: layout)
+            return
+        }
         do {
             let cached = document ?? library.cachedDocument(for: book.id)
             if let cached, let ready = library.cachedPages(for: book.id, key: layoutKey) {
@@ -253,7 +304,7 @@ struct ReaderView: View {
             // neighborhood around the saved position before showing the reader.
             let saved = library.books.first(where: { $0.id == book.id }) ?? book
             let savedOffset = saved.readingOffset
-            let (parsed, result, partial) = try await Task.detached(priority: .userInitiated) {
+            let (parsed, result, partial) = try await readerWorker {
                 let parsed = try cached ?? BookDocumentStore.load(url)
                 if let ready = BookPageStore.load(url, key: layoutKey) {
                     return (parsed, ready, false)
@@ -270,7 +321,7 @@ struct ReaderView: View {
                     : BookPagination.pages(fragment, fontSize: size)
                 let preview = local.map { ReadingPage(offset: window.location + $0.offset, text: $0.text) }
                 return (parsed, preview, true)
-            }.value
+            }
             guard !Task.isCancelled else { return }
             guard !result.isEmpty else { throw BookReadError.invalid("文件没有可阅读的正文。") }
             library.cacheDocument(parsed, for: book.id)
@@ -306,7 +357,9 @@ struct ReaderView: View {
                     let position = pages.indices.contains(currentPage) ? pages[currentPage].offset : (savedOffset ?? 0)
                     library.cachePages(full, for: book.id, key: layoutKey)
                     pages = full
+                    windowRevision = UUID()
                     currentPage = BookPagination.pageIndex(for: position, in: full)
+                    if library.pageMode == 3 { visibleLocation = full[currentPage].location }
                     isPreviewPagination = false
                 }
             }
@@ -320,6 +373,7 @@ struct ReaderView: View {
         document = parsed
         chapterList = parsed.chapters
         pages = result
+        windowRevision = UUID()
         if let offset = saved.readingOffset {
             currentPage = BookPagination.pageIndex(for: offset, in: pages)
         } else {
@@ -327,6 +381,127 @@ struct ReaderView: View {
         }
         loaded = true
         savePosition()
+    }
+
+    private func positionLabel(_ page: Int) -> String {
+        guard pages.indices.contains(page), let resource = pages[page].resourceIndex,
+              let index = epubIndex, let chapter = epubWindow[resource] else {
+            return "\(page + 1) / \(pages.count)"
+        }
+        let local = BookPagination.pageIndex(for: pages[page].offset, in: chapter.pages)
+        return "\(resource + 1)/\(index.resources.count)章 · \(local + 1)/\(chapter.pages.count)页"
+    }
+    private func isCurrentChapter(_ index: Int) -> Bool {
+        guard pages.indices.contains(currentPage) else { return false }
+        if epubIndex != nil { return pages[currentPage].resourceIndex == index }
+        return chapterList[index].offset <= pages[currentPage].offset &&
+            (index + 1 == chapterList.count || chapterList[index + 1].offset > pages[currentPage].offset)
+    }
+    private func openEPUB(layout: ReadingLayout, destination: EPUBLocation? = nil) async {
+        let generation = paginationGeneration
+        let url = library.fileURL(book)
+        let saved = library.books.first(where: { $0.id == book.id }) ?? book
+        let existingIndex = epubIndex
+        do {
+            let (index, location, chapter) = try await readerWorker {
+                let index = try existingIndex ?? EPUBResourceStore.index(url)
+                let location: EPUBLocation
+                if let explicit = destination ?? saved.epubLocation { location = explicit }
+                else if let offset = saved.readingOffset {
+                    location = try EPUBReadingEngine.legacyLocation(url, index: index, offset: offset)
+                } else {
+                    location = EPUBLocation(resource: min(index.resources.count - 1,
+                        Int(saved.progress * Double(index.resources.count))), offset: 0)
+                }
+                let target = max(0, min(index.resources.count - 1, location.resource))
+                let forward = try EPUBReadingEngine.readableChapter(url, index: index, startingAt: target, direction: 1, layout: layout)
+                let chapter = try forward ?? EPUBReadingEngine.readableChapter(url, index: index, startingAt: target - 1, direction: -1, layout: layout)
+                guard let chapter else { throw BookReadError.invalid("书籍没有可阅读的文字正文。") }
+                return (index, location, chapter)
+            }
+            guard !Task.isCancelled, generation == paginationGeneration else { return }
+            epubIndex = index
+            epubLayout = layout
+            document = nil
+            epubWindow = [chapter.resource: chapter]
+            resolvedNeighbors = [:]
+            chapterList = index.resources.enumerated().map {
+                BookChapter(title: $0.element.title ?? "第\($0.offset + 1)章", offset: $0.offset)
+            }
+            pages = chapter.pages
+            currentPage = BookPagination.pageIndex(for: chapter.resource == location.resource ? location.offset : 0, in: pages)
+            visibleLocation = pages[currentPage].location
+            windowRevision = UUID()
+            loaded = true
+            savePosition()
+            prefetchChapters()
+        } catch {
+            guard !Task.isCancelled, generation == paginationGeneration else { return }
+            errorMessage = error.localizedDescription
+        }
+    }
+    private func jumpToChapter(_ resource: Int) {
+        guard let layout = epubLayout else { return }
+        savePosition()
+        chapterTask?.cancel()
+        prefetchTask?.cancel()
+        prefetchTask = nil
+        paginationGeneration = UUID()
+        speech.stop(); listening = false; waitingForSpeechPage = false
+        loaded = false; errorMessage = nil; chapterError = nil
+        chapterTask = Task { await openEPUB(layout: layout, destination: EPUBLocation(resource: resource, offset: 0)) }
+    }
+    private func prefetchChapters() {
+        guard let index = epubIndex, let layout = epubLayout,
+              pages.indices.contains(currentPage), let resource = pages[currentPage].resourceIndex else { return }
+        // Don't cancel and restart on every page within the same chapter.
+        if prefetchTask != nil { return }
+        let generation = paginationGeneration
+        let url = library.fileURL(book)
+        let loadedResources = Set(epubWindow.keys)
+        prefetchTask = Task {
+
+            do {
+                for direction in [1, -1] {
+                    let target = resource + direction
+                    guard index.resources.indices.contains(target), !loadedResources.contains(target),
+                          resolvedNeighbors[resource]?.contains(direction) != true else { continue }
+                    let chapter = try await readerWorker(priority: .utility) {
+                        try EPUBReadingEngine.readableChapter(url, index: index, startingAt: target,
+                                                             direction: direction, layout: layout)
+                    }
+                    guard !Task.isCancelled, generation == paginationGeneration else { return }
+                    resolvedNeighbors[resource, default: []].insert(direction)
+                    if let chapter { extendWindow(chapter) }
+                }
+                if waitingForSpeechPage && listening {
+                    waitingForSpeechPage = false
+                    if pages.indices.contains(currentPage + 1) { move(to: currentPage + 1) }
+                    else { listening = false; speech.stop() }
+                }
+            } catch {
+                guard !Task.isCancelled, generation == paginationGeneration else { return }
+                chapterError = error.localizedDescription
+                if waitingForSpeechPage { waitingForSpeechPage = false; listening = false; speech.stop() }
+            }
+            guard generation == paginationGeneration else { return }
+            prefetchTask = nil
+            // Schedule the next neighborhood only after releasing this task's slot.
+            if chapterError == nil, pages.indices.contains(currentPage), pages[currentPage].resourceIndex != resource {
+                prefetchChapters()
+            }
+        }
+    }
+    private func extendWindow(_ chapter: EPUBChapterPages) {
+        guard pages.indices.contains(currentPage), let resource = pages[currentPage].resourceIndex else { return }
+        let anchor = EPUBLocation(resource: resource, offset: pages[currentPage].offset)
+        let updated = EPUBWindow.adding(chapter, to: epubWindow, anchor: anchor)
+        if !Set(epubWindow.keys).isSubset(of: Set(updated.chapters.keys)) { resolvedNeighbors = [:] }
+        epubWindow = updated.chapters
+        pages = updated.pages
+        currentPage = updated.selected
+        // Stable resource/offset IDs keep scrolling anchored when a chapter is prepended.
+        windowRevision = UUID()
     }
 
 }

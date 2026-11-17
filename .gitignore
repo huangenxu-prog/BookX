@@ -10,3 +10,8 @@ package/
 *.xcresult/
 simulator.log
 screenshots/
+
+# Generated synthetic test books
+Tests/Fixtures/lazy.epub
+Tests/Fixtures/nav3.epub
+Tests/Fixtures/large.epub
