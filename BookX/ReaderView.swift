@@ -30,7 +30,6 @@ struct ReaderView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if library.pageMode != 0 || !loaded {
             HStack {
                 Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
                     .accessibilityLabel("返回")
@@ -41,7 +40,6 @@ struct ReaderView: View {
                 Button { settings = true } label: { Image(systemName: "textformat.size").frame(width: 44, height: 44) }
                     .accessibilityLabel("阅读设置")
             }.padding(.horizontal)
-            }
 
             if let errorMessage {
                 ContentUnavailableView("无法阅读", systemImage: "exclamationmark.book.closed", description: Text(errorMessage))
@@ -51,7 +49,7 @@ struct ReaderView: View {
             } else if library.pageMode == 0 {
                 CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg)
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
-                    .ignoresSafeArea(edges: .vertical)
+                    .clipped()
                     .overlay(alignment: .center) {
                         // Only the small central tap target opens the menu; page turns stay independent.
                         Color.clear
@@ -88,6 +86,15 @@ struct ReaderView: View {
                 }
             }
 
+            if loaded && errorMessage == nil && library.pageMode == 0 {
+                Text("\(currentPage + 1) / \(pages.count)")
+                    .font(.caption)
+                    .foregroundStyle(ink.opacity(0.65))
+                    .accessibilityIdentifier("reading-position")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(bg)
+            }
             if loaded && errorMessage == nil && library.pageMode != 0 {
                 HStack {
                     Text("\(currentPage + 1) / \(pages.count)").accessibilityIdentifier("reading-position")
@@ -120,27 +127,7 @@ struct ReaderView: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
         .onDisappear { savePosition(); library.save(); speech.stop(); listening = false }
-        .overlay(alignment: .top) {
-            if loaded && library.pageMode == 0 {
-                HStack {
-                    Button { dismiss() } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
-                    Spacer()
-                    Text(book.title).font(.subheadline).lineLimit(1)
-                    Spacer()
-                    Button { settings = true } label: { Text("aA").frame(width: 44, height: 44) }
-                }
-                .padding(.horizontal, 14)
-                .foregroundStyle(ink)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if loaded && library.pageMode == 0 {
-                Text("\(currentPage + 1) / \(pages.count)")
-                    .font(.caption).foregroundStyle(ink.opacity(0.65))
-                    .padding(.bottom, 12)
-            }
-        }
-        .overlay(alignment: .bottom) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if loaded && menuVisible {
                 HStack(spacing: 26) {
                     Button { showContents = true } label: {
@@ -158,11 +145,11 @@ struct ReaderView: View {
                 .foregroundStyle(ink)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
                 .padding(.horizontal, 24)
-                .padding(.bottom, 56)
+                .padding(.vertical, 8)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .overlay(alignment: .bottom) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if listening && loaded {
                 HStack(spacing: 16) {
                     Image(systemName: "headphones")
@@ -180,7 +167,7 @@ struct ReaderView: View {
                 .foregroundStyle(ink)
                 .background(.regularMaterial, in: Capsule())
                 .padding(.horizontal, 20)
-                .padding(.bottom, 112)
+                .padding(.vertical, 8)
             }
         }
         .sheet(isPresented: $showContents) {
