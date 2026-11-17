@@ -286,13 +286,19 @@ struct ReaderView: View {
                     // Run the expensive complete layout off the main actor.
                     let full: [ReadingPage]?
                     do {
-                        full = try await Task.detached(priority: .utility) {
+                        let worker = Task.detached(priority: .utility) {
                             let result = try screenPages
                                 ? ScreenPagination.pages(parsed.text, size: textSize, fontSize: size, lineSpacing: spacing)
                                 : BookPagination.pages(parsed.text, fontSize: size)
-                            if !Task.isCancelled { BookPageStore.save(result, source: url, key: layoutKey) }
+                            try Task.checkCancellation()
+                            BookPageStore.save(result, source: url, key: layoutKey)
                             return result
-                        }.value
+                        }
+                        full = try await withTaskCancellationHandler {
+                            try await worker.value
+                        } onCancel: {
+                            worker.cancel()
+                        }
                     } catch { full = nil }
                     guard !Task.isCancelled, generation == paginationGeneration,
                           let full, !full.isEmpty else { return }
