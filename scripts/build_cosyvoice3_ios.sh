@@ -32,4 +32,14 @@ cmake -S "$WORK/source/engines/tts" -B "$WORK/ios-arm64" \
   -DTTS_CPP_BUILD_TESTS=OFF \
   -DTTS_CPP_COREML=OFF
 cmake --build "$WORK/ios-arm64" --config Release --target tts-cpp --parallel 4
-echo "Experimental static library build finished. App bridging and runtime verification remain outstanding."
+# Compile the C ABI bridge against the exact upstream headers with the iOS SDK.
+mkdir -p "$WORK/bridge"
+xcrun --sdk iphoneos clang++ -std=c++17 -O2 -fexceptions -fno-objc-arc \
+  -target arm64-apple-ios18.0 -isysroot "$SDK" \
+  -I"$ROOT/Native/CosyVoice" -I"$WORK/source/engines/tts/include" \
+  -c "$ROOT/Native/CosyVoice/BookXCosyVoiceBridge.cpp" \
+  -o "$WORK/bridge/BookXCosyVoiceBridge.o"
+xcrun --sdk iphoneos ar rcs "$WORK/bridge/libbookx-cosyvoice-bridge.a" \
+  "$WORK/bridge/BookXCosyVoiceBridge.o"
+xcrun --sdk iphoneos lipo -info "$WORK/bridge/libbookx-cosyvoice-bridge.a"
+echo "Experimental engine and bridge compilation completed. Runtime and app integration remain unverified."
