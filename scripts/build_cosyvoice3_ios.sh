@@ -30,7 +30,8 @@ cmake -S "$WORK/source/engines/tts" -B "$WORK/ios-arm64" \
   -DTTS_CPP_BUILD_SHARED=OFF \
   -DTTS_CPP_BUILD_EXECUTABLES=OFF \
   -DTTS_CPP_BUILD_TESTS=OFF \
-  -DTTS_CPP_COREML=OFF
+  -DTTS_CPP_COREML=OFF \
+  -DTTS_CPP_INSTALL=OFF
 cmake --build "$WORK/ios-arm64" --config Release --target tts-cpp --parallel 4
 # Compile the C ABI bridge against the exact upstream headers with the iOS SDK.
 mkdir -p "$WORK/bridge"
