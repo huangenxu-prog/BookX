@@ -18,6 +18,7 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var nextSegment = 0
     private var activePage: Int?
     private var observers: [NSObjectProtocol] = []
+    private var audioSessionActive = false
 
     override init() {
         super.init()
@@ -49,6 +50,7 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
+            audioSessionActive = true
             isSpeaking = true
             prepareNext()
         } catch { fail(error) }
@@ -57,8 +59,10 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate {
     func togglePause() {
         guard activePage != nil else { return }
         if isPaused {
-            do { try AVAudioSession.sharedInstance().setActive(true) }
-            catch { fail(error); return }
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
+                audioSessionActive = true
+            } catch { fail(error); return }
             isPaused = false
             if let player {
                 if !player.play() { fail(playbackError()); return }
@@ -75,7 +79,16 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
     func stop() {
         reset(releaseModel: true)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        deactivateAudioSession()
+    }
+    private func deactivateAudioSession() {
+        guard audioSessionActive else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            audioSessionActive = false
+        } catch {
+            // Keep state so a later stop can retry deactivation.
+        }
     }
     private func reset(releaseModel: Bool) {
         let previous = cancellation.id
@@ -127,6 +140,7 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate {
         activePage = nil
         isSpeaking = false
         finishedPage = page
+        deactivateAudioSession()
     }
     private func fail(_ error: Error) {
         stop()
