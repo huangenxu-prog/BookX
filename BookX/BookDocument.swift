@@ -251,17 +251,20 @@ enum BookDocumentStore {
         return root.appendingPathComponent(url.lastPathComponent + ".parsed")
     }
     static func load(_ url: URL, directory: URL? = nil) throws -> BookDocument {
-        let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        // URL.resourceValues can retain stale metadata after an atomic replacement.
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let sourceSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        let sourceModified = attributes[.modificationDate] as? Date
         let target = cacheURL(for: url, directory: directory)
         if let data = try? Data(contentsOf: target),
            let entry = try? PropertyListDecoder().decode(Entry.self, from: data),
            entry.version == 1, entry.source == url.standardizedFileURL.path,
-           entry.size == values.fileSize, entry.modified == values.contentModificationDate {
+           entry.size == sourceSize, entry.modified == sourceModified {
             return entry.document
         }
         let document = try BookDocumentLoader.load(url)
         let entry = Entry(version: 1, source: url.standardizedFileURL.path,
-                          size: values.fileSize ?? 0, modified: values.contentModificationDate, document: document)
+                          size: sourceSize, modified: sourceModified, document: document)
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
         // Cache failures must never prevent a readable book from opening.
