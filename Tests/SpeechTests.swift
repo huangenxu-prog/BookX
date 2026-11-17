@@ -10,6 +10,16 @@ final class SpeechTests: XCTestCase {
         XCTAssertTrue(SpeechText.segments(" \n\t ").isEmpty)
         XCTAssertEqual(SpeechText.segments("短句。"), ["短句。"])
     }
+    func testSpeechSegmentsPreferNaturalSentenceAndClauseBreaks() {
+        let sentence = "这是一个很长的故事，主人公正在穿过山谷，忽然听见远处传来一阵脚步声。随后，他停下脚步，认真观察四周。"
+        let segments = SpeechText.segments(sentence, limit: 40)
+        XCTAssertEqual(segments.joined(), sentence)
+        XCTAssertTrue(segments.allSatisfy { $0.count <= 40 })
+        XCTAssertTrue(segments.first?.hasSuffix("，") == true || segments.first?.hasSuffix("。") == true)
+        let unpunctuated = String(repeating: "山", count: 95)
+        XCTAssertEqual(SpeechText.segments(unpunctuated).joined(), unpunctuated)
+        XCTAssertTrue(SpeechText.segments(unpunctuated).allSatisfy { $0.count <= 80 })
+    }
     func testWavHeaderClipsNonFiniteSamplesSafely() {
         let data = SpeechPCM(samples: [0, 1, -1, .nan, .infinity, 2], sampleRate: 24000).wav()
         XCTAssertEqual(data.count, 56)
