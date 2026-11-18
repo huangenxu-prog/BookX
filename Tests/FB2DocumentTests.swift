@@ -61,4 +61,15 @@ final class FB2DocumentTests: XCTestCase {
         XCTAssertFalse(book.text.contains("SHOULD_NOT_APPEAR"))
         XCTAssertTrue(book.text.contains("正常内容"))
     }
+    func testInlineFormattingDoesNotDiscardText() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <FictionBook><body><section><title><p>第一章</p></title>
+          <p>普通<strong>加粗</strong>以及<emphasis>强调</emphasis>文字。</p>
+        </section></body></FictionBook>
+        """
+        let book = try await load(xml)
+        XCTAssertTrue(book.text.contains("普通加粗以及强调文字。"))
+    }
+
 }
