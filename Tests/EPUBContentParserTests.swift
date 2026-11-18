@@ -26,6 +26,12 @@ final class EPUBContentParserTests: XCTestCase {
         let original = try XCTUnwrap(Bundle.module.resourceURL?.appendingPathComponent("Fixtures/illustrated.epub"))
         let index = try BookDocumentLoader.epubIndex(original)
         XCTAssertEqual(index.resources.count, 1)
+        let richBlocks = try BookDocumentLoader.epubBlocks(original, resource: index.resources[0])
+        XCTAssertEqual(richBlocks, [
+            EPUBContentBlock(kind: .text("图前文字")),
+            EPUBContentBlock(kind: .image(path: "OPS/Images/figure 1.png", alternative: "插图")),
+            EPUBContentBlock(kind: .text("图后文字"))
+        ])
         let blocks = try EPUBContentParser.blocks(
             Data("<html><body><p>图前文字</p><img src=\"../Images/figure%201.png\"/><p>图后文字</p></body></html>".utf8),
             chapterPath: index.resources[0].path)
