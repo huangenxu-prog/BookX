@@ -239,8 +239,8 @@ private struct BookSpine: View {
     let title: String
     let seed: Int
 
-    private var index: Int { (seed & Int.max) % 6 }
-    private var isLight: Bool { index == 1 || index == 4 }
+    private var index: Int { (seed & Int.max) % 8 }
+    private var isLight: Bool { index == 1 || index == 4 || index == 6 }
     private var base: Color {
         let colors: [Color] = [
             Color(red: 0.19, green: 0.34, blue: 0.27),
@@ -248,7 +248,9 @@ private struct BookSpine: View {
             Color(red: 0.43, green: 0.25, blue: 0.19),
             Color(red: 0.28, green: 0.40, blue: 0.34),
             Color(red: 0.72, green: 0.65, blue: 0.54),
-            Color(red: 0.37, green: 0.39, blue: 0.36)
+            Color(red: 0.37, green: 0.39, blue: 0.36),
+            Color(red: 0.85, green: 0.78, blue: 0.64),
+            Color(red: 0.23, green: 0.30, blue: 0.25)
         ]
         return colors[index]
     }
@@ -272,6 +274,25 @@ private struct BookSpine: View {
                     .init(color: base.opacity(0.93), location: 0.73),
                     .init(color: base.opacity(0.62), location: 1)
                 ], startPoint: .leading, endPoint: .trailing))
+            Canvas(opaque: false) { context, size in
+                // Subtle deterministic linen grain, rendered without image assets.
+                for line in 0..<36 {
+                    let x = CGFloat(line) * size.width / 36
+                    var path = Path()
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x + CGFloat((line + index) % 3 - 1), y: size.height))
+                    context.stroke(path, with: .color(.white.opacity(line.isMultiple(of: 3) ? 0.065 : 0.025)), lineWidth: 0.45)
+                }
+                for line in 0..<25 {
+                    let y = CGFloat(line) * size.height / 25
+                    var path = Path()
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: size.width, y: y))
+                    context.stroke(path, with: .color(.black.opacity(0.025)), lineWidth: 0.4)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .allowsHitTesting(false)
             RoundedRectangle(cornerRadius: 4)
                 .strokeBorder(ink.opacity(0.43), lineWidth: 0.7)
                 .padding(.horizontal, 5)
@@ -290,7 +311,7 @@ private struct BookSpine: View {
                 .foregroundStyle(ink)
                 .shadow(color: .black.opacity(0.12), radius: 0.5, y: 1)
                 Spacer(minLength: 5)
-                SpineOrnament()
+                SpineOrnament(variant: index % 3)
                     .stroke(ink.opacity(0.68), style: StrokeStyle(lineWidth: 0.8, lineCap: .round))
                     .frame(height: 27)
                 Rectangle().fill(ink.opacity(0.55)).frame(height: 1)
@@ -306,15 +327,35 @@ private struct BookSpine: View {
 }
 
 private struct SpineOrnament: Shape {
+    let variant: Int
+
     func path(in rect: CGRect) -> Path {
-        var p = Path()
-        for row in 0..<3 {
-            let y = rect.height * (0.34 + CGFloat(row) * 0.22)
-            p.move(to: CGPoint(x: 0, y: y))
-            p.addQuadCurve(to: CGPoint(x: rect.width, y: y),
-                           control: CGPoint(x: rect.midX, y: y - 18))
+        var path = Path()
+        switch variant {
+        case 0:
+            for row in 0..<3 {
+                let y = rect.height * (0.34 + CGFloat(row) * 0.22)
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addQuadCurve(to: CGPoint(x: rect.width, y: y),
+                                  control: CGPoint(x: rect.midX, y: y - 18))
+            }
+        case 1:
+            let middle = rect.midX
+            for offset in [-7.0, 0.0, 7.0] {
+                path.move(to: CGPoint(x: middle + offset, y: rect.height * 0.2))
+                path.addLine(to: CGPoint(x: middle + offset, y: rect.height * 0.82))
+            }
+            path.move(to: CGPoint(x: 0, y: rect.height * 0.82))
+            path.addLine(to: CGPoint(x: rect.width, y: rect.height * 0.82))
+        default:
+            path.move(to: CGPoint(x: 0, y: rect.height * 0.78))
+            path.addLine(to: CGPoint(x: rect.width, y: rect.height * 0.78))
+            path.move(to: CGPoint(x: rect.midX, y: rect.height * 0.12))
+            path.addLine(to: CGPoint(x: rect.width * 0.18, y: rect.height * 0.74))
+            path.addMove(to: CGPoint(x: rect.midX, y: rect.height * 0.12))
+            path.addLine(to: CGPoint(x: rect.width * 0.82, y: rect.height * 0.74))
         }
-        return p
+        return path
     }
 }
 
@@ -683,6 +724,18 @@ struct RootView: View {
                             .frame(height: 10)
                             .overlay(alignment: .top) {
                                 Rectangle().fill(.white.opacity(0.30)).frame(height: 1)
+                            }
+                            .overlay {
+                                Canvas { context, size in
+                                    for line in 0..<7 {
+                                        let y = CGFloat(line) * size.height / 7
+                                        var grain = Path()
+                                        grain.move(to: CGPoint(x: 0, y: y))
+                                        grain.addLine(to: CGPoint(x: size.width, y: y + 0.5))
+                                        context.stroke(grain, with: .color(.white.opacity(0.045)), lineWidth: 0.5)
+                                    }
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
                             }
                             .shadow(color: .black.opacity(0.19), radius: 5, y: 5)
                     }
