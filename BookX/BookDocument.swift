@@ -37,8 +37,12 @@ struct EPUBResourceIndex: Codable, Sendable {
 enum BookDocumentLoader {
     static func load(_ url: URL) async throws -> BookDocument {
         if url.pathExtension.lowercased() == "epub" { return try await epub(url) }
-        let data = try Data(contentsOf: url)
         let ext = url.pathExtension.lowercased()
+        let limit = ext == "rtf" ? 20 * 1024 * 1024 : 50 * 1024 * 1024
+        let fileSize = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard fileSize <= limit else { throw BookReadError.invalid("文件过大，当前格式上限为 \(limit / 1024 / 1024) MB。") }
+        let data = try Data(contentsOf: url)
+        try Task.checkCancellation()
         if ext == "rtf" {
             guard data.count <= 20 * 1024 * 1024 else {
                 throw BookReadError.invalid("RTF 文件超过 20 MB。")
@@ -46,10 +50,11 @@ enum BookDocumentLoader {
             let attributed = try NSAttributedString(data: data, options: [
                 .documentType: NSAttributedString.DocumentType.rtf
             ], documentAttributes: nil)
-            guard !attributed.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            let body = attributed.string.replacingOccurrences(of: "\u{fffc}", with: "")
+            guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw BookReadError.invalid("RTF 正文为空。")
             }
-            return BookDocument(text: attributed.string)
+            return BookDocument(text: body)
         }
         guard data.count <= 50 * 1024 * 1024 else {
             throw BookReadError.invalid("文件过大，请导入小于 50 MB 的 TXT。")
@@ -64,7 +69,17 @@ enum BookDocumentLoader {
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw BookReadError.invalid("正文为空或无法识别文字编码。")
         }
-        return BookDocument(text: text.replacingOccurrences(of: "\r\n", with: "\n"))
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        let result: BookDocument
+        switch ext {
+        case "md", "markdown": result = try StructuredTextReader.markdown(normalized)
+        case "html", "htm": result = try StructuredTextReader.html(normalized)
+        default: result = BookDocument(text: normalized)
+        }
+        guard !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw BookReadError.invalid("文件没有可读取的文字正文。")
+        }
+        return result
     }
 
     private static let normalizationRules: [(NSRegularExpression, String)] = [
@@ -482,7 +497,7 @@ enum BookDocumentStore {
     }
     private static func write(_ document: BookDocument, to target: URL,
                               source: String, size: Int, modified: Date?) {
-        let meta = Metadata(version: 3, source: source, size: size, modified: modified,
+        let meta = Metadata(version: 4, source: source, size: size, modified: modified,
                             title: document.title, author: document.author,
                             chapters: document.chapters)
         let textURL = target.appendingPathExtension("txt")
@@ -502,7 +517,7 @@ enum BookDocumentStore {
         let target = cacheURL(for: url, directory: directory)
         if let data = try? Data(contentsOf: target, options: .mappedIfSafe) {
             if let meta = try? PropertyListDecoder().decode(Metadata.self, from: data),
-               meta.version == 3, meta.source == source, meta.size == size,
+               meta.version == 4, meta.source == source, meta.size == size,
                meta.modified == modified,
                let body = try? Data(contentsOf: target.appendingPathExtension("txt"),
                                     options: .mappedIfSafe),
@@ -512,7 +527,8 @@ enum BookDocumentStore {
             }
             // Transparently migrate already-imported books from the old single-blob cache.
             if let legacy = try? PropertyListDecoder().decode(LegacyEntry.self, from: data),
-               legacy.version == 1, legacy.source == source, legacy.size == size,
+               legacy.version == 1, !["md", "markdown", "rtf", "html", "htm"].contains(url.pathExtension.lowercased()),
+               legacy.source == source, legacy.size == size,
                legacy.modified == modified {
                 write(legacy.document, to: target, source: source, size: size, modified: modified)
                 return legacy.document
@@ -526,7 +542,7 @@ enum BookDocumentStore {
         guard let data = try? Data(contentsOf: cacheURL(for: url, directory: nil)),
               let meta = try? PropertyListDecoder().decode(Metadata.self, from: data),
               let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              meta.version == 3, meta.source == url.standardizedFileURL.path,
+              meta.version == 4, meta.source == url.standardizedFileURL.path,
               meta.size == (attributes[.size] as? NSNumber)?.intValue,
               meta.modified == (attributes[.modificationDate] as? Date) else { return nil }
         return meta.chapters
@@ -563,14 +579,14 @@ enum BookPageStore {
         guard let signature = try? signature(source),
               let data = try? Data(contentsOf: url(for: source, key: key)),
               let entry = try? PropertyListDecoder().decode(Entry.self, from: data),
-              entry.version == 2, entry.sourceSize == signature.0,
+              entry.version == 3, entry.sourceSize == signature.0,
               entry.modified == signature.1, entry.layoutKey == key,
               !entry.pages.isEmpty else { return nil }
         return entry.pages
     }
     static func save(_ pages: [ReadingPage], source: URL, key: String) {
         guard let signature = try? signature(source) else { return }
-        let entry = Entry(version: 2, sourceSize: signature.0, modified: signature.1,
+        let entry = Entry(version: 3, sourceSize: signature.0, modified: signature.1,
                           layoutKey: key, pages: pages)
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary

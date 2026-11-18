@@ -8,6 +8,12 @@ packages:
   ZIPFoundation:
     url: https://github.com/readium/ZIPFoundation.git
     exactVersion: 3.0.1
+  Markdown:
+    url: https://github.com/apple/swift-markdown.git
+    exactVersion: 0.6.0
+  SwiftSoup:
+    url: https://github.com/scinfu/SwiftSoup.git
+    exactVersion: 2.9.6
 targets:
   BookX:
     type: application
@@ -22,6 +28,10 @@ targets:
       properties:
         UILaunchScreen: {}
     dependencies:
+      - package: Markdown
+        product: Markdown
+      - package: SwiftSoup
+        product: SwiftSoup
       - package: Readium
         product: ReadiumShared
       - package: Readium
@@ -59,6 +69,7 @@ targets:
     platform: iOS
     deploymentTarget: "17.0"
     sources:
+      - path: Tests/StructuredTextTests.swift
       - path: RuntimeTests
       - path: Tests/Fixtures/readium2.epub
         buildPhase: resources
