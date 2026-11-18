@@ -6,7 +6,7 @@ packages:
     url: https://github.com/readium/swift-toolkit.git
     from: 3.8.0
   ZIPFoundation:
-    url: https://github.com/weichsel/ZIPFoundation
+    url: https://github.com/readium/ZIPFoundation.git
     from: 3.0.1
 targets:
   BookX:
@@ -29,6 +29,7 @@ targets:
       - package: Readium
         product: ReadiumNavigator
       - package: ZIPFoundation
+        product: ReadiumZIPFoundation
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.huangenxu.BookX
