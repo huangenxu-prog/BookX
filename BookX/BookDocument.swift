@@ -305,6 +305,9 @@ struct ReadingPage: Codable, Sendable {
     let offset: Int
     let text: String
     var resourceIndex: Int? = nil
+    // A standalone illustration sheet keeps the native page-curl architecture.
+    // This is deliberately optional so TXT and existing cached text pages decode unchanged.
+    var imagePath: String? = nil
 }
 
 enum BookPagination {
