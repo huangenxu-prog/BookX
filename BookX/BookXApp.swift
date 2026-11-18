@@ -254,6 +254,14 @@ private struct BookSpine: View {
         ]
         return colors[index]
     }
+    private var textureName: String {
+        switch index {
+        case 1, 4, 6: return "LinenIvory"
+        case 2: return "LeatherBrown"
+        case 5: return "LeatherCharcoal"
+        default: return "LeatherGreen"
+        }
+    }
     private var ink: Color {
         isLight ? Color(red: 0.29, green: 0.22, blue: 0.14) :
             Color(red: 0.91, green: 0.76, blue: 0.46)
@@ -274,6 +282,15 @@ private struct BookSpine: View {
                     .init(color: base, location: 0.78),
                     .init(color: base.opacity(0.58), location: 1)
                 ], startPoint: .leading, endPoint: .trailing))
+            if UIImage(named: textureName) != nil {
+                Image(textureName)
+                    .resizable()
+                    .scaledToFill()
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .allowsHitTesting(false)
+            }
+            // Procedural fallback when the texture asset is not installed.
+            if UIImage(named: textureName) == nil {
             // Fine irregular grain instead of obvious straight stripes.
             Canvas(opaque: false) { context, size in
                 for n in 0..<380 {
@@ -296,6 +313,7 @@ private struct BookSpine: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .allowsHitTesting(false)
+            }
             RoundedRectangle(cornerRadius: 3)
                 .strokeBorder(ink.opacity(0.48), lineWidth: 0.7)
                 .padding(.horizontal, 6)
@@ -314,9 +332,16 @@ private struct BookSpine: View {
                 .foregroundStyle(ink)
                 .shadow(color: .black.opacity(0.20), radius: 0.7, y: 1)
                 Spacer(minLength: 5)
-                SpineOrnament(variant: index % 3)
-                    .stroke(ink.opacity(0.83), style: StrokeStyle(lineWidth: 0.85, lineCap: .round))
-                    .frame(height: 31)
+                if UIImage(named: ["OrnamentWaves", "OrnamentMountains", "OrnamentFloral"][index % 3]) != nil {
+                    Image(["OrnamentWaves", "OrnamentMountains", "OrnamentFloral"][index % 3])
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 31)
+                } else {
+                    SpineOrnament(variant: index % 3)
+                        .stroke(ink.opacity(0.83), style: StrokeStyle(lineWidth: 0.85, lineCap: .round))
+                        .frame(height: 31)
+                }
                 Rectangle().fill(ink.opacity(0.70)).frame(height: 0.8)
             }
             .padding(.horizontal, 9)
@@ -762,6 +787,14 @@ struct RootView: View {
                                 Color(red: 0.45, green: 0.28, blue: 0.17)
                             ], startPoint: .top, endPoint: .bottom))
                             .frame(height: 10)
+                            .overlay {
+                                if UIImage(named: "WalnutShelf") != nil {
+                                    Image("WalnutShelf")
+                                        .resizable()
+                                        .scaledToFill()
+                                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                                }
+                            }
                             .overlay(alignment: .top) {
                                 Rectangle().fill(.white.opacity(0.30)).frame(height: 1)
                             }
