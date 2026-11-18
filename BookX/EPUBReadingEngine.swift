@@ -41,7 +41,7 @@ enum EPUBReadingEngine {
     static func chapter(_ source: URL, index: EPUBResourceIndex, at resource: Int,
                         layout: ReadingLayout) async throws -> EPUBChapterPages {
         let text = try await EPUBResourceStore.chapter(source, index: index, at: resource)
-        let pages = try layout.pages(text).map {
+        let textPages = try layout.pages(text).map {
             ReadingPage(offset: $0.offset, text: $0.text, resourceIndex: resource)
         }
         // Parse only the requested XHTML resource, keeping its ordered image references.
@@ -59,6 +59,27 @@ enum EPUBReadingEngine {
             case .image(let path, let alternative):
                 images.append(EPUBChapterImage(path: path, alternative: alternative,
                                                precedingText: precedingText))
+            }
+        }
+        // Insert one native curl sheet per image, in the order of the XHTML.
+        // Resolve each image to the nearest preceding text page without changing
+        // the UTF-16 offsets of the original text pages or legacy bookmarks.
+        let source = text as NSString
+        var placed: [(page: Int, ordinal: Int, image: EPUBChapterImage)] = []
+        for (ordinal, item) in images.enumerated() {
+            let tail = String(item.precedingText.suffix(28)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let match = tail.isEmpty ? NSRange(location: 0, length: 0)
+                : source.range(of: tail, options: .backwards)
+            let target = match.location == NSNotFound ? 0 : NSMaxRange(match)
+            let page = textPages.lastIndex(where: { $0.offset <= target }) ?? 0
+            placed.append((page, ordinal, item))
+        }
+        var pages: [ReadingPage] = []
+        for (position, page) in textPages.enumerated() {
+            pages.append(page)
+            for entry in placed where entry.page == position {
+                pages.append(ReadingPage(offset: page.offset, text: entry.image.alternative,
+                                         resourceIndex: resource, imagePath: entry.image.path))
             }
         }
         return EPUBChapterPages(resource: resource, length: text.utf16.count,
