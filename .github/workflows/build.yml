@@ -29,6 +29,8 @@ jobs:
         run: |
           sips -z 1024 1024 BookX/Assets.xcassets/AppIcon.appiconset/IMG_2626.png --out BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
           sips -g pixelWidth -g pixelHeight BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+      - name: Generate BookX spine and shelf textures
+        run: python3 scripts/generate_bookx_textures.py
       - name: Generate project
         run: xcodegen generate
       - name: Compile simulator app
