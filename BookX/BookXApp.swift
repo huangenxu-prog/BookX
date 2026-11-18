@@ -112,7 +112,7 @@ final class BookLibrary: ObservableObject {
             if Task.isCancelled { break }
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            guard ["txt", "epub"].contains(url.pathExtension.lowercased()) else { continue }
+            guard ["txt", "epub", "md", "markdown", "rtf"].contains(url.pathExtension.lowercased()) else { continue }
             let name = UUID().uuidString + "." + url.pathExtension.lowercased()
             do {
                 try fm.copyItem(at: url, to: folder.appendingPathComponent(name))
@@ -295,7 +295,9 @@ struct RootView: View {
             Text("书籍仍保留在书库，阅读进度不会丢失。")
         }
         .tint(BookXStyle.purple)
-        .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data,
+            UTType(filenameExtension: "md") ?? .plainText,
+            UTType(filenameExtension: "markdown") ?? .plainText, .rtf], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await library.importFiles(urls) }
             case .failure(let error): library.importError = error.localizedDescription
