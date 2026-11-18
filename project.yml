@@ -7,7 +7,7 @@ packages:
     from: 3.8.0
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
-    from: 0.9.19
+    from: 3.0.1
 targets:
   BookX:
     type: application
