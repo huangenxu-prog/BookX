@@ -301,53 +301,98 @@ private struct BookOpeningOverlay: View {
     let title: String
     let stage: Int
 
+    private let bookWidth: CGFloat = 182
+    private let bookHeight: CGFloat = 267
+    private let paper = Color(red: 0.96, green: 0.92, blue: 0.83)
+    private let cloth = Color(red: 0.25, green: 0.39, blue: 0.32)
+
+    private var insidePage: some View {
+        RoundedRectangle(cornerRadius: 5)
+            .fill(paper)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(.black.opacity(0.12))
+                    .frame(width: 7)
+                    .blur(radius: 3)
+            }
+            .overlay {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .lineLimit(2)
+                        .padding(.bottom, 12)
+                    ForEach(0..<7, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.black.opacity(0.16))
+                            .frame(height: 2)
+                            .padding(.trailing, index.isMultiple(of: 3) ? 32 : 0)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(Color(red: 0.24, green: 0.26, blue: 0.22))
+                .padding(23)
+            }
+            .frame(width: bookWidth, height: bookHeight)
+    }
+
+    private var frontCover: some View {
+        RoundedRectangle(cornerRadius: 5)
+            .fill(
+                LinearGradient(colors: [
+                    cloth.opacity(0.65), cloth, cloth.opacity(0.91)
+                ], startPoint: .leading, endPoint: .trailing)
+            )
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(.black.opacity(0.18))
+                    .frame(width: 8)
+                    .blur(radius: 3)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(Color(red: 0.77, green: 0.67, blue: 0.45).opacity(0.75), lineWidth: 1)
+                    .padding(11)
+            }
+            .overlay {
+                VStack(spacing: 18) {
+                    Image(systemName: "books.vertical")
+                        .font(.system(size: 22, weight: .ultraLight))
+                    Text(title)
+                        .font(.system(size: 21, weight: .semibold, design: .serif))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(4)
+                        .padding(.horizontal, 18)
+                    Image(systemName: "leaf")
+                        .font(.system(size: 16, weight: .ultraLight))
+                }
+                .foregroundStyle(Color(red: 0.95, green: 0.86, blue: 0.68))
+            }
+            .frame(width: bookWidth, height: bookHeight)
+    }
+
     var body: some View {
         ZStack {
-            Color.black.opacity(stage == 0 ? 0.05 : 0.25).ignoresSafeArea()
+            Color.black.opacity(stage == 0 ? 0.06 : 0.24).ignoresSafeArea()
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color(red: 0.94, green: 0.88, blue: 0.75))
-                    .frame(width: 182, height: 267)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color(red: 0.78, green: 0.72, blue: 0.62))
+                    .frame(width: bookWidth, height: bookHeight)
                     .offset(x: 8, y: 5)
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(Color(red: 0.28, green: 0.40, blue: 0.33).gradient)
-                    .overlay {
-                        VStack(spacing: 15) {
-                            Image(systemName: "books.vertical")
-                                .font(.system(size: 25, weight: .ultraLight))
-                            Text(title)
-                                .font(.system(size: 22, weight: .semibold, design: .serif))
-                                .multilineTextAlignment(.center)
-                                .lineLimit(4)
-                                .padding(.horizontal, 16)
-                        }
-                        .foregroundStyle(Color(red: 0.94, green: 0.86, blue: 0.69))
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 5)
-                            .strokeBorder(.white.opacity(0.28), lineWidth: 1)
-                            .padding(9)
-                    }
-                    .frame(width: 182, height: 267)
-                    .rotation3DEffect(.degrees(stage == 0 ? -72 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.65)
-                if stage >= 2 {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(red: 0.32, green: 0.46, blue: 0.38))
-                        .frame(width: 182, height: 267)
-                        .overlay {
-                            Text(title)
-                                .font(.system(size: 20, weight: .semibold, design: .serif))
-                                .foregroundStyle(.white)
-                                .padding(14)
-                        }
-                        .rotation3DEffect(.degrees(stage == 3 ? -155 : 0), axis: (x: 0, y: 1, z: 0),
-                                          anchor: .leading, perspective: 0.65)
-                }
+                insidePage
+                frontCover
+                    .rotation3DEffect(
+                        .degrees(stage == 0 ? -75 : (stage >= 3 ? -150 : 0)),
+                        axis: (x: 0, y: 1, z: 0),
+                        anchor: .leading,
+                        perspective: 0.55
+                    )
             }
-            .scaleEffect(stage == 0 ? 0.65 : 1)
-            .shadow(color: .black.opacity(0.24), radius: 20, y: 14)
+            .frame(width: bookWidth, height: bookHeight)
+            .scaleEffect(stage == 0 ? 0.67 : 1)
+            .shadow(color: .black.opacity(0.25), radius: 18, y: 13)
         }
         .allowsHitTesting(true)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("正在打开《" + title + "》")
     }
 }
