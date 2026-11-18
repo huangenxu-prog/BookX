@@ -21,3 +21,11 @@ def text(i):
 book('lazy.epub', [text(0), '<html><body/></html>', text(2), '<html><broken>'])
 book('nav3.epub', [text(0), text(1)], nav='nav')
 book('large.epub', [text(i) for i in range(1836)])
+
+# An illustration embedded between paragraphs, including a percent-encoded path.
+with ZipFile(root / 'illustrated.epub', 'w', ZIP_DEFLATED) as z:
+    z.writestr('mimetype', 'application/epub+zip')
+    z.writestr('META-INF/container.xml', '<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>')
+    z.writestr('OPS/book.opf', '<package><metadata><title>图文测试</title></metadata><manifest><item id="c0" href="Text/chapter.xhtml" media-type="application/xhtml+xml"/><item id="img" href="Images/figure%201.png" media-type="image/png"/></manifest><spine><itemref idref="c0"/></spine></package>')
+    z.writestr('OPS/Text/chapter.xhtml', '<html><body><p>图前文字</p><img src="../Images/figure%201.png" alt="插图"/><p>图后文字</p></body></html>')
+    z.writestr('OPS/Images/figure 1.png', b'\\x89PNG\\r\\n\\x1a\\nfixture')
