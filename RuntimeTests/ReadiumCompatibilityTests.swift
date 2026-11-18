@@ -61,7 +61,12 @@ final class ReadiumCompatibilityTests: XCTestCase {
         let host = UIHostingController(rootView: curl)
         host.loadViewIfNeeded()
         host.view.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
+        let curlWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        curlWindow.rootViewController = host
+        curlWindow.makeKeyAndVisible()
         host.view.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 350_000_000)
+        defer { curlWindow.isHidden = true; curlWindow.rootViewController = nil }
         func findCurl(_ root: UIViewController) -> UIPageViewController? {
             if let page = root as? UIPageViewController { return page }
             for child in root.children {
