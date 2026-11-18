@@ -347,8 +347,7 @@ private struct BookSpine: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 14)
         }
-        .frame(width: CGFloat(45 + (seed & Int.max) % 10),
-               height: CGFloat(215 + (seed & Int.max) % 13))
+        .frame(width: 49, height: 230)
         .shadow(color: .black.opacity(0.20), radius: 4, x: 2, y: 4)
         .accessibilityHidden(true)
     }
@@ -756,64 +755,55 @@ struct RootView: View {
             ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入电子书"))
                 .padding(.top, 45)
         } else {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 0)], spacing: 22) {
-                ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 6)), id: \.self) { start in
-                    HStack(alignment: .bottom, spacing: 1) {
-                        ForEach(Array(sortedBooks[start..<min(start + 6, sortedBooks.count)])) { book in
-                            Button { takeBook(book) } label: {
-                                BookSpine(title: book.title, seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) })
-                                    .offset(y: pullingBook == book.id ? -22 : 0)
-                                    .scaleEffect(pullingBook == book.id ? 1.07 : 1)
-                                    .shadow(color: .black.opacity(pullingBook == book.id ? 0.25 : 0.08),
-                                            radius: pullingBook == book.id ? 12 : 3, y: 4)
-                                    .zIndex(pullingBook == book.id ? 1 : 0)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(book.title)
-                            .accessibilityIdentifier("library-book-" + book.title)
-                            .contextMenu {
-                                Button("删除书籍", role: .destructive) { pendingDeletion = book }
+            // Design reference: five upright, non-overlapping spines on the first shelf;
+            // four on the second. Explicit widths prevent intrinsic image sizing from
+            // turning a book spine into a full cover or pushing books off screen.
+            GeometryReader { geometry in
+                let availableWidth = max(0, geometry.size.width)
+                let spineWidth = min(53, max(37, (availableWidth - 48) / 5))
+                let gap = max(5, (availableWidth - spineWidth * 5) / 6)
+                VStack(spacing: 25) {
+                    ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 5)), id: \.self) { start in
+                        HStack(alignment: .bottom, spacing: gap) {
+                            ForEach(Array(sortedBooks[start..<min(start + 5, sortedBooks.count)])) { book in
+                                Button { takeBook(book) } label: {
+                                    BookSpine(title: book.title, seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) })
+                                        .frame(width: spineWidth, height: 230)
+                                        .offset(y: pullingBook == book.id ? -22 : 0)
+                                        .scaleEffect(pullingBook == book.id ? 1.07 : 1)
+                                        .zIndex(pullingBook == book.id ? 1 : 0)
+                                }
+                                .frame(width: spineWidth, height: 230)
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(book.title)
+                                .accessibilityIdentifier("library-book-" + book.title)
+                                .contextMenu {
+                                    Button("删除书籍", role: .destructive) { pendingDeletion = book }
+                                }
                             }
                         }
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 8)
-                    .overlay(alignment: .bottom) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(LinearGradient(colors: [
-                                Color(red: 0.79, green: 0.57, blue: 0.37),
-                                Color(red: 0.57, green: 0.36, blue: 0.21),
-                                Color(red: 0.45, green: 0.28, blue: 0.17)
-                            ], startPoint: .top, endPoint: .bottom))
-                            .frame(height: 10)
-                            .overlay {
-                                if UIImage(named: "WalnutShelf") != nil {
-                                    Image("WalnutShelf")
-                                        .resizable()
-                                        .scaledToFill()
-                                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                                }
-                            }
-                            .overlay(alignment: .top) {
-                                Rectangle().fill(.white.opacity(0.30)).frame(height: 1)
-                            }
-                            .overlay {
-                                Canvas { context, size in
-                                    for line in 0..<7 {
-                                        let y = CGFloat(line) * size.height / 7
-                                        var grain = Path()
-                                        grain.move(to: CGPoint(x: 0, y: y))
-                                        grain.addLine(to: CGPoint(x: size.width, y: y + 0.5))
-                                        context.stroke(grain, with: .color(.white.opacity(0.045)), lineWidth: 0.5)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.bottom, 11)
+                        .overlay(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(LinearGradient(colors: [
+                                    Color(red: 0.76, green: 0.50, blue: 0.30),
+                                    Color(red: 0.53, green: 0.31, blue: 0.17)
+                                ], startPoint: .top, endPoint: .bottom))
+                                .frame(height: 9)
+                                .overlay {
+                                    if UIImage(named: "WalnutShelf") != nil {
+                                        Image("WalnutShelf").resizable().scaledToFill()
+                                            .frame(height: 9).clipped()
                                     }
                                 }
-                                .clipShape(RoundedRectangle(cornerRadius: 3))
-                            }
-                            .shadow(color: .black.opacity(0.19), radius: 5, y: 5)
+                                .shadow(color: .black.opacity(0.17), radius: 4, y: 4)
+                        }
                     }
                 }
+                .frame(width: availableWidth, alignment: .center)
             }
+            .frame(height: CGFloat((sortedBooks.count + 4) / 5) * 241 + CGFloat(max(0, (sortedBooks.count + 4) / 5 - 1)) * 25)
         }
     }
     private func sectionTitle(_ title: String) -> some View {
