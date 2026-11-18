@@ -297,6 +297,61 @@ private struct BookSpine: View {
     }
 }
 
+private struct BookOpeningOverlay: View {
+    let title: String
+    let stage: Int
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(stage == 0 ? 0.05 : 0.25).ignoresSafeArea()
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color(red: 0.94, green: 0.88, blue: 0.75))
+                    .frame(width: 182, height: 267)
+                    .offset(x: 8, y: 5)
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color(red: 0.28, green: 0.40, blue: 0.33).gradient)
+                    .overlay {
+                        VStack(spacing: 15) {
+                            Image(systemName: "books.vertical")
+                                .font(.system(size: 25, weight: .ultraLight))
+                            Text(title)
+                                .font(.system(size: 22, weight: .semibold, design: .serif))
+                                .multilineTextAlignment(.center)
+                                .lineLimit(4)
+                                .padding(.horizontal, 16)
+                        }
+                        .foregroundStyle(Color(red: 0.94, green: 0.86, blue: 0.69))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 5)
+                            .strokeBorder(.white.opacity(0.28), lineWidth: 1)
+                            .padding(9)
+                    }
+                    .frame(width: 182, height: 267)
+                    .rotation3DEffect(.degrees(stage == 0 ? -72 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.65)
+                if stage >= 2 {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(red: 0.32, green: 0.46, blue: 0.38))
+                        .frame(width: 182, height: 267)
+                        .overlay {
+                            Text(title)
+                                .font(.system(size: 20, weight: .semibold, design: .serif))
+                                .foregroundStyle(.white)
+                                .padding(14)
+                        }
+                        .rotation3DEffect(.degrees(stage == 3 ? -155 : 0), axis: (x: 0, y: 1, z: 0),
+                                          anchor: .leading, perspective: 0.65)
+                }
+            }
+            .scaleEffect(stage == 0 ? 0.65 : 1)
+            .shadow(color: .black.opacity(0.24), radius: 20, y: 14)
+        }
+        .allowsHitTesting(true)
+        .accessibilityLabel("正在打开《" + title + "》")
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var library: BookLibrary
     @State private var tab = 0
@@ -340,6 +395,11 @@ struct RootView: View {
                     .padding(.bottom, 28)
                 }
                 bottomBar
+            }
+            if let animatedBook {
+                BookOpeningOverlay(title: animatedBook.title, stage: bookOpeningStage)
+                    .transition(.opacity)
+                    .zIndex(10)
             }
         }
     }
@@ -492,19 +552,30 @@ struct RootView: View {
         }
     }
     @State private var pullingBook: UUID?
+    @State private var animatedBook: BookItem?
+    @State private var bookOpeningStage = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private func takeBook(_ book: BookItem) {
-        guard pullingBook == nil else { return }
+        guard pullingBook == nil, animatedBook == nil else { return }
         if reduceMotion {
             selected = book
             return
         }
-        withAnimation(.easeOut(duration: 0.22)) { pullingBook = book.id }
+        pullingBook = book.id
+        animatedBook = book
+        bookOpeningStage = 0
         Task { @MainActor in
+            withAnimation(.easeOut(duration: 0.20)) { bookOpeningStage = 1 }
+            try? await Task.sleep(for: .milliseconds(210))
+            withAnimation(.easeInOut(duration: 0.28)) { bookOpeningStage = 2 }
+            try? await Task.sleep(for: .milliseconds(290))
+            withAnimation(.easeInOut(duration: 0.25)) { bookOpeningStage = 3 }
             try? await Task.sleep(for: .milliseconds(260))
             selected = book
+            animatedBook = nil
             pullingBook = nil
+            bookOpeningStage = 0
         }
     }
 
