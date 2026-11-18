@@ -24,7 +24,7 @@ final class BookXUITests: XCTestCase {
         let app = launchFresh()
         snapshot("01-library")
         app.buttons["library-book-阅读测试"].tap()
-        let position = app.staticTexts["reading-position"]
+        let position = app.staticTexts["reading-position"].firstMatch
         XCTAssertTrue(position.waitForExistence(timeout: 15))
         app.swipeLeft()
         app.swipeLeft()
@@ -58,7 +58,7 @@ final class BookXUITests: XCTestCase {
         app.buttons["library-book-阅读测试"].tap()
         XCTAssertTrue(app.staticTexts["reading-position"].waitForExistence(timeout: 15))
         for _ in 0..<4 { app.swipeUp() }
-        let position = app.staticTexts["reading-position"]
+        let position = app.staticTexts["reading-position"].firstMatch
         let saved = position.label
         XCTAssertFalse(saved.hasPrefix("1 /"))
         app.buttons["返回"].tap()
