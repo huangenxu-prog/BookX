@@ -29,8 +29,18 @@ jobs:
         run: |
           sips -z 1024 1024 BookX/Assets.xcassets/AppIcon.appiconset/IMG_2626.png --out BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
           sips -g pixelWidth -g pixelHeight BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
-      - name: Generate BookX spine and shelf textures
-        run: python3 scripts/generate_bookx_textures.py
+      - name: Install uploaded BookX texture assets
+        run: |
+          set -euo pipefail
+          archive="BookX/Assets.xcassets/AppIcon.appiconset/BookXTextureAssets.zip"
+          test -f "$archive"
+          unzip -oq "$archive" -d .
+          for asset in LeatherGreen LeatherBrown LeatherCharcoal LinenIvory WalnutShelf OrnamentWaves OrnamentMountains OrnamentFloral; do
+            test -s "BookX/Assets.xcassets/${asset}.imageset/${asset}.png"
+            test -s "BookX/Assets.xcassets/${asset}.imageset/Contents.json"
+          done
+          rm "$archive"
+          echo "Installed 8 uploaded texture asset sets."
       - name: Generate project
         run: xcodegen generate
       - name: Compile simulator app
