@@ -633,11 +633,16 @@ private final class FB2TextReader: NSObject, XMLParserDelegate {
         guard parser.parse() else {
             throw BookReadError.invalid("FB2 XML 解析失败：\(parser.parserError?.localizedDescription ?? "格式无效")")
         }
-        let text = reader.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = reader.body
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw BookReadError.invalid("FB2 没有可读取的正文。") }
+        let leading = raw.utf16.count - raw.drop(while: { $0.isWhitespace }).utf16.count
+        let chapters = reader.chapters.map {
+            BookChapter(title: $0.title, offset: max(0, $0.offset - leading))
+        }
         return BookDocument(title: reader.bookTitle.trimmingCharacters(in: .whitespacesAndNewlines),
                             author: reader.authors.joined(separator: "、"), text: text,
-                            chapters: reader.chapters)
+                            chapters: chapters)
     }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String,
