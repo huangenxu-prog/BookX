@@ -238,9 +238,10 @@ private struct BookCover: View {
 private struct BookSpine: View {
     let title: String
     let seed: Int
+    let styleIndex: Int
 
-    private var index: Int { (seed & Int.max) % 8 }
-    private var isLight: Bool { [1, 4, 6].contains(index) }
+    private var index: Int { styleIndex % 8 }
+    private var isLight: Bool { [0, 2, 6].contains(index) }
     private var base: Color {
         let colors: [Color] = [
             Color(red: 0.13, green: 0.29, blue: 0.23),
@@ -256,9 +257,9 @@ private struct BookSpine: View {
     }
     private var textureName: String {
         switch index {
-        case 1, 4, 6: return "LinenIvory"
-        case 2: return "LeatherBrown"
-        case 5: return "LeatherCharcoal"
+        case 0, 2, 6: return "LinenIvory"
+        case 5: return "LeatherBrown"
+        case 7: return "LeatherCharcoal"
         default: return "LeatherGreen"
         }
     }
@@ -325,7 +326,7 @@ private struct BookSpine: View {
                 VStack(spacing: 0) {
                     ForEach(Array(spineTitle.enumerated()), id: \.offset) { _, character in
                         Text(String(character))
-                            .font(.system(size: 16, weight: .medium, design: .serif))
+                            .font(.system(size: 19, weight: .semibold, design: .serif))
                             .fixedSize()
                     }
                 }
@@ -344,10 +345,11 @@ private struct BookSpine: View {
                 }
                 Rectangle().fill(ink.opacity(0.70)).frame(height: 0.8)
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 12)
         }
         .frame(width: 49, height: 230)
+        .clipped()
         .shadow(color: .black.opacity(0.20), radius: 4, x: 2, y: 4)
         .accessibilityHidden(true)
     }
@@ -760,50 +762,54 @@ struct RootView: View {
             // turning a book spine into a full cover or pushing books off screen.
             GeometryReader { geometry in
                 let availableWidth = max(0, geometry.size.width)
-                let spineWidth = min(53, max(37, (availableWidth - 48) / 5))
-                let gap = max(5, (availableWidth - spineWidth * 5) / 6)
-                VStack(spacing: 25) {
+                let spineWidth = min(49, max(37, (availableWidth - 70) / 5))
+                let gap = max(11, (availableWidth - spineWidth * 5) / 6)
+                VStack(spacing: 24) {
                     ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 5)), id: \.self) { start in
-                        HStack(alignment: .bottom, spacing: gap) {
-                            ForEach(Array(sortedBooks[start..<min(start + 5, sortedBooks.count)])) { book in
-                                Button { takeBook(book) } label: {
-                                    BookSpine(title: book.title, seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) })
-                                        .frame(width: spineWidth, height: 230)
-                                        .offset(y: pullingBook == book.id ? -22 : 0)
-                                        .scaleEffect(pullingBook == book.id ? 1.07 : 1)
-                                        .zIndex(pullingBook == book.id ? 1 : 0)
-                                }
-                                .frame(width: spineWidth, height: 230)
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(book.title)
-                                .accessibilityIdentifier("library-book-" + book.title)
-                                .contextMenu {
-                                    Button("删除书籍", role: .destructive) { pendingDeletion = book }
+                        VStack(spacing: 0) {
+                            HStack(alignment: .bottom, spacing: gap) {
+                                ForEach(Array(sortedBooks[start..<min(start + 5, sortedBooks.count)].enumerated()), id: \.element.id) { offset, book in
+                                    Button { takeBook(book) } label: {
+                                        BookSpine(title: book.title,
+                                                  seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) },
+                                                  styleIndex: (start + offset) % 8)
+                                            .frame(width: spineWidth, height: 230)
+                                            .clipped()
+                                            .offset(y: pullingBook == book.id ? -22 : 0)
+                                            .scaleEffect(pullingBook == book.id ? 1.07 : 1)
+                                    }
+                                    .frame(width: spineWidth, height: 230)
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(book.title)
+                                    .accessibilityIdentifier("library-book-" + book.title)
+                                    .contextMenu {
+                                        Button("删除书籍", role: .destructive) { pendingDeletion = book }
+                                    }
                                 }
                             }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.bottom, 11)
-                        .overlay(alignment: .bottom) {
+                            .frame(maxWidth: .infinity, alignment: .center)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(LinearGradient(colors: [
-                                    Color(red: 0.76, green: 0.50, blue: 0.30),
-                                    Color(red: 0.53, green: 0.31, blue: 0.17)
+                                    Color(red: 0.78, green: 0.53, blue: 0.32),
+                                    Color(red: 0.55, green: 0.33, blue: 0.18)
                                 ], startPoint: .top, endPoint: .bottom))
-                                .frame(height: 9)
+                                .frame(height: 10)
                                 .overlay {
                                     if UIImage(named: "WalnutShelf") != nil {
                                         Image("WalnutShelf").resizable().scaledToFill()
-                                            .frame(height: 9).clipped()
+                                            .frame(height: 10).clipped()
                                     }
                                 }
-                                .shadow(color: .black.opacity(0.17), radius: 4, y: 4)
+                                .overlay(alignment: .top) {
+                                    Rectangle().fill(.white.opacity(0.38)).frame(height: 1)
+                                }
+                                .shadow(color: .black.opacity(0.20), radius: 4, y: 4)
                         }
                     }
                 }
                 .frame(width: availableWidth, alignment: .center)
             }
-            .frame(height: CGFloat((sortedBooks.count + 4) / 5) * 241 + CGFloat(max(0, (sortedBooks.count + 4) / 5 - 1)) * 25)
+            .frame(height: CGFloat((sortedBooks.count + 4) / 5) * 240 + CGFloat(max(0, (sortedBooks.count + 4) / 5 - 1)) * 24)
         }
     }
     private func sectionTitle(_ title: String) -> some View {
