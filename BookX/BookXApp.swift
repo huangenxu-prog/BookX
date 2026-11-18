@@ -241,110 +241,51 @@ private struct BookSpine: View {
     let styleIndex: Int
     let width: CGFloat
 
-    private var index: Int { styleIndex % 9 }
-    private var isLight: Bool { [0, 2, 6].contains(index) }
-    private var base: Color {
-        let colors: [Color] = [
-            Color(red: 0.13, green: 0.29, blue: 0.23),
-            Color(red: 0.87, green: 0.78, blue: 0.62),
-            Color(red: 0.34, green: 0.18, blue: 0.13),
-            Color(red: 0.17, green: 0.30, blue: 0.24),
-            Color(red: 0.82, green: 0.73, blue: 0.58),
-            Color(red: 0.31, green: 0.30, blue: 0.27),
-            Color(red: 0.86, green: 0.78, blue: 0.65),
-            Color(red: 0.21, green: 0.31, blue: 0.27)
-        ]
-        return colors[index]
+    private var assetName: String {
+        String(format: "BookSpine%02d", styleIndex % 10 + 1)
     }
-    private var textureName: String {
-        switch index {
-        case 0, 2, 6: return "LinenIvory"
-        case 5: return "LeatherBrown"
-        case 8: return "LeatherCharcoal"
-        default: return "LeatherGreen"
-        }
-    }
+    private var lightSpine: Bool { [0, 2, 6].contains(styleIndex % 10) }
     private var ink: Color {
-        isLight ? Color(red: 0.29, green: 0.22, blue: 0.14) :
-            Color(red: 0.91, green: 0.76, blue: 0.46)
+        lightSpine ? Color(red: 0.24, green: 0.19, blue: 0.13) :
+            Color(red: 0.96, green: 0.83, blue: 0.57)
     }
     private var spineTitle: String {
         let cleaned = title.replacingOccurrences(of: "《", with: "")
             .replacingOccurrences(of: "》", with: "")
-        let main = cleaned.components(separatedBy: ["（", "(", "【", "["]).first ?? cleaned
-        return String(main.prefix(9))
+        return cleaned.components(separatedBy: ["（", "(", "【", "["]).first ?? cleaned
+    }
+    private var titleSize: CGFloat {
+        switch spineTitle.count {
+        case 0...5: return 19
+        case 6...8: return 16
+        default: return 14
+        }
     }
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(LinearGradient(stops: [
-                    .init(color: base.opacity(0.66), location: 0),
-                    .init(color: base, location: 0.13),
-                    .init(color: base, location: 0.78),
-                    .init(color: base.opacity(0.58), location: 1)
-                ], startPoint: .leading, endPoint: .trailing))
-            if UIImage(named: textureName) != nil {
-                Image(textureName)
-                    .resizable()
-                    .scaledToFill()
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .allowsHitTesting(false)
-            }
-            // Procedural fallback when the texture asset is not installed.
-            if UIImage(named: textureName) == nil {
-            // Fine irregular grain instead of obvious straight stripes.
-            Canvas(opaque: false) { context, size in
-                for n in 0..<380 {
-                    let hash = (n &* 1103515245 &+ index &* 12345) & 0x7fffffff
-                    let x = CGFloat(hash % 997) / 997 * size.width
-                    let y = CGFloat((hash / 997) % 991) / 991 * size.height
-                    let rect = CGRect(x: x, y: y, width: CGFloat(hash % 3 + 1) * 0.27,
-                                      height: CGFloat(hash % 5 + 1) * 0.33)
-                    context.fill(Path(ellipseIn: rect), with: .color(
-                        (n.isMultiple(of: 3) ? Color.white : Color.black)
-                            .opacity(n.isMultiple(of: 3) ? 0.075 : 0.055)))
-                }
-                // A narrow raised hinge and subtle edge wear give the book thickness.
-                for x in [2.0, 4.0, Double(size.width) - 5.0] {
-                    var line = Path()
-                    line.move(to: CGPoint(x: x, y: 4))
-                    line.addLine(to: CGPoint(x: x, y: size.height - 4))
-                    context.stroke(line, with: .color(.white.opacity(0.12)), lineWidth: 0.7)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .allowsHitTesting(false)
-            }
-            RoundedRectangle(cornerRadius: 3)
-                .strokeBorder(ink.opacity(0.48), lineWidth: 0.7)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 7)
+            // The artwork contains the entire leather spine, embossed trim,
+            // edge highlights and illustration. Only the book title is drawn in code.
+            Image(assetName)
+                .resizable()
+                .scaledToFill()
+                .frame(width: width, height: 230)
+                .clipped()
             VStack(spacing: 0) {
-                Rectangle().fill(ink.opacity(0.68)).frame(height: 0.8)
-                Rectangle().fill(ink.opacity(0.30)).frame(height: 0.5).padding(.top, 3)
-                Spacer(minLength: 4)
-                VStack(spacing: 0) {
-                    ForEach(Array(spineTitle.enumerated()), id: \.offset) { _, character in
-                        Text(String(character))
-                            .font(.system(size: 18, weight: .semibold, design: .serif))
-                            .fixedSize()
-                    }
+                ForEach(Array(spineTitle.prefix(11).enumerated()), id: \.offset) { _, character in
+                    Text(String(character))
+                        .font(.system(size: titleSize, weight: .semibold, design: .serif))
+                        .fixedSize()
                 }
-                .foregroundStyle(ink)
-                .shadow(color: .black.opacity(0.20), radius: 0.7, y: 1)
-                Spacer(minLength: 5)
-                SpineOrnament(variant: index % 3)
-                    .stroke(ink.opacity(0.85), style: StrokeStyle(lineWidth: 0.85, lineCap: .round, lineJoin: .round))
-                    .frame(height: 42)
-                                Rectangle().fill(ink.opacity(0.70)).frame(height: 0.8)
             }
-            .padding(.horizontal, 5)
-            .padding(.vertical, 12)
+            .foregroundStyle(ink)
+            .shadow(color: .black.opacity(lightSpine ? 0.08 : 0.40), radius: 0.8, y: 1)
+            .frame(width: width - 8)
+            .offset(y: -23)
         }
         .frame(width: width, height: 230)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-        .shadow(color: .black.opacity(0.20), radius: 4, x: 2, y: 4)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .shadow(color: .black.opacity(0.19), radius: 3, x: 2, y: 3)
         .accessibilityHidden(true)
     }
 }
@@ -781,7 +722,7 @@ struct RootView: View {
                                     Button { takeBook(book) } label: {
                                         BookSpine(title: book.title,
                                                   seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) },
-                                                  styleIndex: (start + offset) % 9,
+                                                  styleIndex: Int((book.title.unicodeScalars.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1.value)) &* UInt64(1099511628211) }) % 10),
                                                   width: spineWidth)
                                             .frame(width: spineWidth, height: 230)
                                             .clipped()
@@ -805,8 +746,8 @@ struct RootView: View {
                                 ], startPoint: .top, endPoint: .bottom))
                                 .frame(height: 10)
                                 .overlay {
-                                    if UIImage(named: "WalnutShelf") != nil {
-                                        Image("WalnutShelf").resizable().scaledToFill()
+                                    if UIImage(named: "BookShelfWood") != nil {
+                                        Image("BookShelfWood").resizable().scaledToFill()
                                             .frame(height: 10).clipped()
                                     }
                                 }
