@@ -352,7 +352,7 @@ private struct SpineOrnament: Shape {
             path.addLine(to: CGPoint(x: rect.width, y: rect.height * 0.78))
             path.move(to: CGPoint(x: rect.midX, y: rect.height * 0.12))
             path.addLine(to: CGPoint(x: rect.width * 0.18, y: rect.height * 0.74))
-            path.addMove(to: CGPoint(x: rect.midX, y: rect.height * 0.12))
+            path.move(to: CGPoint(x: rect.midX, y: rect.height * 0.12))
             path.addLine(to: CGPoint(x: rect.width * 0.82, y: rect.height * 0.74))
         }
         return path
