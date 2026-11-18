@@ -28,4 +28,4 @@ with ZipFile(root / 'illustrated.epub', 'w', ZIP_DEFLATED) as z:
     z.writestr('META-INF/container.xml', '<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>')
     z.writestr('OPS/book.opf', '<package><metadata><title>图文测试</title></metadata><manifest><item id="c0" href="Text/chapter.xhtml" media-type="application/xhtml+xml"/><item id="img" href="Images/figure%201.png" media-type="image/png"/></manifest><spine><itemref idref="c0"/></spine></package>')
     z.writestr('OPS/Text/chapter.xhtml', '<html><body><p>图前文字</p><img src="../Images/figure%201.png" alt="插图"/><p>图后文字</p></body></html>')
-    z.writestr('OPS/Images/figure 1.png', b'\\x89PNG\\r\\n\\x1a\\nfixture')
+    z.writestr('OPS/Images/figure 1.png', bytes([137, 80, 78, 71, 13, 10, 26, 10]) + b'fixture')
