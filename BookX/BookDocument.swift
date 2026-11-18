@@ -1,6 +1,10 @@
 import Foundation
 import CoreFoundation
+#if canImport(ReadiumZIPFoundation)
 import ReadiumZIPFoundation
+#else
+import ZIPFoundation
+#endif
 import CryptoKit
 
 struct BookChapter: Codable, Sendable {
