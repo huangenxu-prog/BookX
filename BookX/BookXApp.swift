@@ -334,17 +334,10 @@ private struct BookSpine: View {
                 .foregroundStyle(ink)
                 .shadow(color: .black.opacity(0.20), radius: 0.7, y: 1)
                 Spacer(minLength: 5)
-                if false && UIImage(named: ["OrnamentWaves", "OrnamentMountains", "OrnamentFloral"][index % 3]) != nil {
-                    Image(["OrnamentWaves", "OrnamentMountains", "OrnamentFloral"][index % 3])
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 31)
-                } else {
-                    SpineOrnament(variant: index % 3)
-                        .stroke(ink.opacity(0.83), style: StrokeStyle(lineWidth: 0.85, lineCap: .round))
-                        .frame(height: 31)
-                }
-                Rectangle().fill(ink.opacity(0.70)).frame(height: 0.8)
+                SpineOrnament(variant: index % 3)
+                    .stroke(ink.opacity(0.85), style: StrokeStyle(lineWidth: 0.85, lineCap: .round, lineJoin: .round))
+                    .frame(height: 42)
+                                Rectangle().fill(ink.opacity(0.70)).frame(height: 0.8)
             }
             .padding(.horizontal, 5)
             .padding(.vertical, 12)
@@ -360,32 +353,47 @@ private struct SpineOrnament: Shape {
     let variant: Int
 
     func path(in rect: CGRect) -> Path {
-        var path = Path()
+        var p = Path()
+        let w = rect.width
+        let h = rect.height
         switch variant {
         case 0:
-            for row in 0..<3 {
-                let y = rect.height * (0.34 + CGFloat(row) * 0.22)
-                path.move(to: CGPoint(x: 0, y: y))
-                path.addQuadCurve(to: CGPoint(x: rect.width, y: y),
-                                  control: CGPoint(x: rect.midX, y: y - 18))
+            // Layered ink-wash mountains, like the pale spines in the reference.
+            for layer in 0..<3 {
+                let baseline = h * (0.68 + CGFloat(layer) * 0.10)
+                p.move(to: CGPoint(x: 0, y: baseline))
+                p.addLine(to: CGPoint(x: w * 0.24, y: baseline - h * (0.30 - CGFloat(layer) * 0.055)))
+                p.addLine(to: CGPoint(x: w * 0.43, y: baseline - h * 0.10))
+                p.addLine(to: CGPoint(x: w * 0.63, y: baseline - h * (0.39 - CGFloat(layer) * 0.06)))
+                p.addLine(to: CGPoint(x: w, y: baseline))
             }
         case 1:
-            let middle = rect.midX
-            for offset in [-7.0, 0.0, 7.0] {
-                path.move(to: CGPoint(x: middle + offset, y: rect.height * 0.2))
-                path.addLine(to: CGPoint(x: middle + offset, y: rect.height * 0.82))
+            // Engraved waves with nested curves.
+            for row in 0..<5 {
+                let y = h * (0.45 + CGFloat(row) * 0.095)
+                p.move(to: CGPoint(x: 0, y: y))
+                p.addQuadCurve(to: CGPoint(x: w * 0.52, y: y),
+                               control: CGPoint(x: w * 0.26, y: y - h * 0.38))
+                p.addQuadCurve(to: CGPoint(x: w, y: y),
+                               control: CGPoint(x: w * 0.78, y: y - h * 0.30))
             }
-            path.move(to: CGPoint(x: 0, y: rect.height * 0.82))
-            path.addLine(to: CGPoint(x: rect.width, y: rect.height * 0.82))
         default:
-            path.move(to: CGPoint(x: 0, y: rect.height * 0.78))
-            path.addLine(to: CGPoint(x: rect.width, y: rect.height * 0.78))
-            path.move(to: CGPoint(x: rect.midX, y: rect.height * 0.12))
-            path.addLine(to: CGPoint(x: rect.width * 0.18, y: rect.height * 0.74))
-            path.move(to: CGPoint(x: rect.midX, y: rect.height * 0.12))
-            path.addLine(to: CGPoint(x: rect.width * 0.82, y: rect.height * 0.74))
+            // Old-city roofline and a lantern silhouette.
+            let y = h * 0.63
+            p.move(to: CGPoint(x: w * 0.08, y: y))
+            p.addQuadCurve(to: CGPoint(x: w * 0.92, y: y),
+                           control: CGPoint(x: w * 0.5, y: h * 0.12))
+            p.move(to: CGPoint(x: w * 0.17, y: y + 3))
+            p.addLine(to: CGPoint(x: w * 0.83, y: y + 3))
+            for i in 0..<4 {
+                let x = w * (0.23 + CGFloat(i) * 0.18)
+                p.move(to: CGPoint(x: x, y: y + 3))
+                p.addLine(to: CGPoint(x: x, y: h * 0.93))
+            }
+            p.move(to: CGPoint(x: w * 0.10, y: h * 0.94))
+            p.addLine(to: CGPoint(x: w * 0.90, y: h * 0.94))
         }
-        return path
+        return p
     }
 }
 
