@@ -261,6 +261,10 @@ struct RootView: View {
         return letter.range(of: "^[A-Z]$", options: .regularExpression) == nil ? "#" : letter
     }
     var body: some View {
+        presentedReader
+    }
+
+    private var rootLayout: some View {
         ZStack {
             BookXStyle.paper.ignoresSafeArea()
             VStack(spacing: 0) {
@@ -276,49 +280,73 @@ struct RootView: View {
                 bottomBar
             }
         }
-        .preferredColorScheme(.light)
-        .onChange(of: library.books.count) { old, new in if new > old { tab = 1 } }
-        .confirmationDialog("删除这本书及阅读记录？", isPresented: Binding(
-            get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }
-        ), titleVisibility: .visible) {
-            if let book = pendingDeletion {
-                Button("删除《\(book.title)》", role: .destructive) { library.delete(book); pendingDeletion = nil }
+    }
+
+    private var libraryDialogs: some View {
+        rootLayout
+            .preferredColorScheme(.light)
+            .onChange(of: library.books.count) { old, new in if new > old { tab = 1 } }
+            .confirmationDialog("删除这本书及阅读记录？", isPresented: Binding(
+                get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }
+            ), titleVisibility: .visible) {
+                if let book = pendingDeletion {
+                    Button("删除《\(book.title)》", role: .destructive) { library.delete(book); pendingDeletion = nil }
+                }
             }
-        }
-        .confirmationDialog("移出书架？", isPresented: Binding(
-            get: { pendingShelfRemoval != nil },
-            set: { if !$0 { pendingShelfRemoval = nil } }
-        ), titleVisibility: .visible) {
-            if let book = pendingShelfRemoval {
-                Button("移出书架") { library.removeFromShelf(book); pendingShelfRemoval = nil }
+            .confirmationDialog("移出书架？", isPresented: Binding(
+                get: { pendingShelfRemoval != nil },
+                set: { if !$0 { pendingShelfRemoval = nil } }
+            ), titleVisibility: .visible) {
+                if let book = pendingShelfRemoval {
+                    Button("移出书架") { library.removeFromShelf(book); pendingShelfRemoval = nil }
+                }
+            } message: {
+                Text("书籍仍保留在书库，阅读进度不会丢失。")
             }
-        } message: {
-            Text("书籍仍保留在书库，阅读进度不会丢失。")
-        }
-        .tint(BookXStyle.purple)
-        .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data,
-            UTType(filenameExtension: "md") ?? .plainText,
-            UTType(filenameExtension: "markdown") ?? .plainText, .rtf, .html, UTType(filenameExtension: "fb2") ?? .xml], allowsMultipleSelection: true) { result in
-            switch result {
-            case .success(let urls): Task { await library.importFiles(urls) }
-            case .failure(let error): library.importError = error.localizedDescription
+    }
+
+    private var importingView: some View {
+        libraryDialogs
+            .tint(BookXStyle.purple)
+            .fileImporter(isPresented: $importer, allowedContentTypes: importTypes,
+                          allowsMultipleSelection: true) { result in
+                switch result {
+                case .success(let urls): Task { await library.importFiles(urls) }
+                case .failure(let error): library.importError = error.localizedDescription
+                }
             }
-        }
-        .overlay {
-            if library.importing {
-                ProgressView("正在导入书籍")
-                    .padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                if library.importing {
+                    ProgressView("正在导入书籍")
+                        .padding(24)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                }
             }
-        }
-        .alert("提示", isPresented: Binding(get: { library.importError != nil }, set: { if !$0 { library.importError = nil } })) {
-            Button("知道了", role: .cancel) { library.importError = nil }
-        } message: { Text(library.importError ?? "") }
-        .sheet(isPresented: $settings) {
-            SettingsView().environmentObject(library).presentationDetents([.medium, .large])
-        }
-        .fullScreenCover(item: $selected) { book in
-            ReaderView(book: book).environmentObject(library)
-        }
+    }
+
+    private var importTypes: [UTType] {
+        [.plainText, UTType(filenameExtension: "epub") ?? .data,
+         UTType(filenameExtension: "md") ?? .plainText,
+         UTType(filenameExtension: "markdown") ?? .plainText,
+         .rtf, .html, UTType(filenameExtension: "fb2") ?? .xml]
+    }
+
+    private var presentedReader: some View {
+        importingView
+            .alert("提示", isPresented: Binding(
+                get: { library.importError != nil },
+                set: { if !$0 { library.importError = nil } }
+            )) {
+                Button("知道了", role: .cancel) { library.importError = nil }
+            } message: {
+                Text(library.importError ?? "")
+            }
+            .sheet(isPresented: $settings) {
+                SettingsView().environmentObject(library).presentationDetents([.medium, .large])
+            }
+            .fullScreenCover(item: $selected) { book in
+                ReaderView(book: book).environmentObject(library)
+            }
     }
     private var header: some View {
         VStack(alignment: .leading, spacing: 9) {
