@@ -239,61 +239,82 @@ private struct BookSpine: View {
     let title: String
     let seed: Int
 
-    private var tone: Color {
-        let palette: [Color] = [
-            Color(red: 0.22, green: 0.37, blue: 0.31),
-            Color(red: 0.46, green: 0.29, blue: 0.20),
-            Color(red: 0.72, green: 0.61, blue: 0.46),
-            Color(red: 0.35, green: 0.41, blue: 0.38),
-            Color(red: 0.67, green: 0.54, blue: 0.39)
+    private var index: Int { (seed & Int.max) % 6 }
+    private var isLight: Bool { index == 1 || index == 4 }
+    private var base: Color {
+        let colors: [Color] = [
+            Color(red: 0.19, green: 0.34, blue: 0.27),
+            Color(red: 0.81, green: 0.72, blue: 0.56),
+            Color(red: 0.43, green: 0.25, blue: 0.19),
+            Color(red: 0.28, green: 0.40, blue: 0.34),
+            Color(red: 0.72, green: 0.65, blue: 0.54),
+            Color(red: 0.37, green: 0.39, blue: 0.36)
         ]
-        return palette[(seed & Int.max) % palette.count]
+        return colors[index]
     }
-
+    private var ink: Color {
+        isLight ? Color(red: 0.29, green: 0.24, blue: 0.18) :
+            Color(red: 0.94, green: 0.83, blue: 0.61)
+    }
     private var spineTitle: String {
         let cleaned = title.replacingOccurrences(of: "《", with: "")
             .replacingOccurrences(of: "》", with: "")
-        let primary = cleaned.components(separatedBy: ["（", "(", "【", "["]).first ?? cleaned
-        return String(primary.prefix(8))
+        let main = cleaned.components(separatedBy: ["（", "(", "【", "["]).first ?? cleaned
+        return String(main.prefix(9))
     }
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(
-                    LinearGradient(colors: [
-                        tone.opacity(0.73), tone, tone.opacity(0.93), tone.opacity(0.62)
-                    ], startPoint: .leading, endPoint: .trailing)
-                )
             RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(.white.opacity(0.33), lineWidth: 1)
+                .fill(LinearGradient(stops: [
+                    .init(color: base.opacity(0.68), location: 0),
+                    .init(color: base, location: 0.15),
+                    .init(color: base.opacity(0.93), location: 0.73),
+                    .init(color: base.opacity(0.62), location: 1)
+                ], startPoint: .leading, endPoint: .trailing))
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(ink.opacity(0.43), lineWidth: 0.7)
                 .padding(.horizontal, 5)
-                .padding(.vertical, 8)
-            VStack(spacing: 2) {
-                Rectangle().fill(.white.opacity(0.42)).frame(height: 1)
-                Rectangle().fill(.white.opacity(0.25)).frame(height: 1)
-                Spacer(minLength: 8)
-                VStack(spacing: 1) {
+                .padding(.vertical, 7)
+            VStack(spacing: 0) {
+                Rectangle().fill(ink.opacity(0.56)).frame(height: 1)
+                Rectangle().fill(ink.opacity(0.25)).frame(height: 1).padding(.top, 3)
+                Spacer(minLength: 4)
+                VStack(spacing: 0) {
                     ForEach(Array(spineTitle.enumerated()), id: \.offset) { _, character in
                         Text(String(character))
-                            .font(.system(size: 19, weight: .semibold, design: .serif))
-                            .minimumScaleFactor(0.8)
+                            .font(.system(size: 16, weight: .medium, design: .serif))
+                            .fixedSize()
                     }
                 }
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.15), radius: 1, y: 1)
-                Spacer(minLength: 8)
-                Image(systemName: "book.closed")
-                    .font(.system(size: 13, weight: .light))
-                    .foregroundStyle(.white.opacity(0.55))
-                Rectangle().fill(.white.opacity(0.3)).frame(height: 1)
+                .foregroundStyle(ink)
+                .shadow(color: .black.opacity(0.12), radius: 0.5, y: 1)
+                Spacer(minLength: 5)
+                SpineOrnament()
+                    .stroke(ink.opacity(0.68), style: StrokeStyle(lineWidth: 0.8, lineCap: .round))
+                    .frame(height: 27)
+                Rectangle().fill(ink.opacity(0.55)).frame(height: 1)
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 15)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 14)
         }
-        .frame(width: CGFloat(61 + (seed & Int.max) % 15),
-               height: CGFloat(226 + (seed & Int.max) % 18))
+        .frame(width: CGFloat(45 + (seed & Int.max) % 10),
+               height: CGFloat(215 + (seed & Int.max) % 13))
+        .shadow(color: .black.opacity(0.13), radius: 3, x: 2, y: 3)
         .accessibilityHidden(true)
+    }
+}
+
+private struct SpineOrnament: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        for row in 0..<3 {
+            let y = rect.height * (0.34 + CGFloat(row) * 0.22)
+            p.move(to: CGPoint(x: 0, y: y))
+            p.addQuadCurve(to: CGPoint(x: rect.width, y: y),
+                           control: CGPoint(x: rect.midX, y: y - 18))
+        }
+        return p
     }
 }
 
@@ -630,9 +651,9 @@ struct RootView: View {
                 .padding(.top, 45)
         } else {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 0)], spacing: 22) {
-                ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 5)), id: \.self) { start in
-                    HStack(alignment: .bottom, spacing: 3) {
-                        ForEach(Array(sortedBooks[start..<min(start + 5, sortedBooks.count)])) { book in
+                ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 6)), id: \.self) { start in
+                    HStack(alignment: .bottom, spacing: 1) {
+                        ForEach(Array(sortedBooks[start..<min(start + 6, sortedBooks.count)])) { book in
                             Button { takeBook(book) } label: {
                                 BookSpine(title: book.title, seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) })
                                     .offset(y: pullingBook == book.id ? -22 : 0)
@@ -654,9 +675,16 @@ struct RootView: View {
                     .padding(.bottom, 8)
                     .overlay(alignment: .bottom) {
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(red: 0.58, green: 0.43, blue: 0.31))
-                            .frame(height: 8)
-                            .shadow(color: .black.opacity(0.16), radius: 5, y: 5)
+                            .fill(LinearGradient(colors: [
+                                Color(red: 0.79, green: 0.57, blue: 0.37),
+                                Color(red: 0.57, green: 0.36, blue: 0.21),
+                                Color(red: 0.45, green: 0.28, blue: 0.17)
+                            ], startPoint: .top, endPoint: .bottom))
+                            .frame(height: 10)
+                            .overlay(alignment: .top) {
+                                Rectangle().fill(.white.opacity(0.30)).frame(height: 1)
+                            }
+                            .shadow(color: .black.opacity(0.19), radius: 5, y: 5)
                     }
                 }
             }
