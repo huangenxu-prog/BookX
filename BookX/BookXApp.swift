@@ -240,23 +240,23 @@ private struct BookSpine: View {
     let seed: Int
 
     private var index: Int { (seed & Int.max) % 8 }
-    private var isLight: Bool { index == 1 || index == 4 || index == 6 }
+    private var isLight: Bool { [1, 4, 6].contains(index) }
     private var base: Color {
         let colors: [Color] = [
-            Color(red: 0.19, green: 0.34, blue: 0.27),
-            Color(red: 0.81, green: 0.72, blue: 0.56),
-            Color(red: 0.43, green: 0.25, blue: 0.19),
-            Color(red: 0.28, green: 0.40, blue: 0.34),
-            Color(red: 0.72, green: 0.65, blue: 0.54),
-            Color(red: 0.37, green: 0.39, blue: 0.36),
-            Color(red: 0.85, green: 0.78, blue: 0.64),
-            Color(red: 0.23, green: 0.30, blue: 0.25)
+            Color(red: 0.13, green: 0.29, blue: 0.23),
+            Color(red: 0.87, green: 0.78, blue: 0.62),
+            Color(red: 0.34, green: 0.18, blue: 0.13),
+            Color(red: 0.17, green: 0.30, blue: 0.24),
+            Color(red: 0.82, green: 0.73, blue: 0.58),
+            Color(red: 0.31, green: 0.30, blue: 0.27),
+            Color(red: 0.86, green: 0.78, blue: 0.65),
+            Color(red: 0.21, green: 0.31, blue: 0.27)
         ]
         return colors[index]
     }
     private var ink: Color {
-        isLight ? Color(red: 0.29, green: 0.24, blue: 0.18) :
-            Color(red: 0.94, green: 0.83, blue: 0.61)
+        isLight ? Color(red: 0.29, green: 0.22, blue: 0.14) :
+            Color(red: 0.91, green: 0.76, blue: 0.46)
     }
     private var spineTitle: String {
         let cleaned = title.replacingOccurrences(of: "《", with: "")
@@ -267,39 +267,42 @@ private struct BookSpine: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 5)
+            RoundedRectangle(cornerRadius: 4)
                 .fill(LinearGradient(stops: [
-                    .init(color: base.opacity(0.68), location: 0),
-                    .init(color: base, location: 0.15),
-                    .init(color: base.opacity(0.93), location: 0.73),
-                    .init(color: base.opacity(0.62), location: 1)
+                    .init(color: base.opacity(0.66), location: 0),
+                    .init(color: base, location: 0.13),
+                    .init(color: base, location: 0.78),
+                    .init(color: base.opacity(0.58), location: 1)
                 ], startPoint: .leading, endPoint: .trailing))
+            // Fine irregular grain instead of obvious straight stripes.
             Canvas(opaque: false) { context, size in
-                // Subtle deterministic linen grain, rendered without image assets.
-                for line in 0..<36 {
-                    let x = CGFloat(line) * size.width / 36
-                    var path = Path()
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x + CGFloat((line + index) % 3 - 1), y: size.height))
-                    context.stroke(path, with: .color(.white.opacity(line.isMultiple(of: 3) ? 0.065 : 0.025)), lineWidth: 0.45)
+                for n in 0..<380 {
+                    let hash = (n &* 1103515245 &+ index &* 12345) & 0x7fffffff
+                    let x = CGFloat(hash % 997) / 997 * size.width
+                    let y = CGFloat((hash / 997) % 991) / 991 * size.height
+                    let rect = CGRect(x: x, y: y, width: CGFloat(hash % 3 + 1) * 0.27,
+                                      height: CGFloat(hash % 5 + 1) * 0.33)
+                    context.fill(Path(ellipseIn: rect), with: .color(
+                        (n.isMultiple(of: 3) ? Color.white : Color.black)
+                            .opacity(n.isMultiple(of: 3) ? 0.075 : 0.055)))
                 }
-                for line in 0..<25 {
-                    let y = CGFloat(line) * size.height / 25
-                    var path = Path()
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: size.width, y: y))
-                    context.stroke(path, with: .color(.black.opacity(0.025)), lineWidth: 0.4)
+                // A narrow raised hinge and subtle edge wear give the book thickness.
+                for x in [2.0, 4.0, Double(size.width) - 5.0] {
+                    var line = Path()
+                    line.move(to: CGPoint(x: x, y: 4))
+                    line.addLine(to: CGPoint(x: x, y: size.height - 4))
+                    context.stroke(line, with: .color(.white.opacity(0.12)), lineWidth: 0.7)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
             .allowsHitTesting(false)
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(ink.opacity(0.43), lineWidth: 0.7)
-                .padding(.horizontal, 5)
+            RoundedRectangle(cornerRadius: 3)
+                .strokeBorder(ink.opacity(0.48), lineWidth: 0.7)
+                .padding(.horizontal, 6)
                 .padding(.vertical, 7)
             VStack(spacing: 0) {
-                Rectangle().fill(ink.opacity(0.56)).frame(height: 1)
-                Rectangle().fill(ink.opacity(0.25)).frame(height: 1).padding(.top, 3)
+                Rectangle().fill(ink.opacity(0.68)).frame(height: 0.8)
+                Rectangle().fill(ink.opacity(0.30)).frame(height: 0.5).padding(.top, 3)
                 Spacer(minLength: 4)
                 VStack(spacing: 0) {
                     ForEach(Array(spineTitle.enumerated()), id: \.offset) { _, character in
@@ -309,19 +312,19 @@ private struct BookSpine: View {
                     }
                 }
                 .foregroundStyle(ink)
-                .shadow(color: .black.opacity(0.12), radius: 0.5, y: 1)
+                .shadow(color: .black.opacity(0.20), radius: 0.7, y: 1)
                 Spacer(minLength: 5)
                 SpineOrnament(variant: index % 3)
-                    .stroke(ink.opacity(0.68), style: StrokeStyle(lineWidth: 0.8, lineCap: .round))
-                    .frame(height: 27)
-                Rectangle().fill(ink.opacity(0.55)).frame(height: 1)
+                    .stroke(ink.opacity(0.83), style: StrokeStyle(lineWidth: 0.85, lineCap: .round))
+                    .frame(height: 31)
+                Rectangle().fill(ink.opacity(0.70)).frame(height: 0.8)
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 14)
         }
         .frame(width: CGFloat(45 + (seed & Int.max) % 10),
                height: CGFloat(215 + (seed & Int.max) % 13))
-        .shadow(color: .black.opacity(0.13), radius: 3, x: 2, y: 3)
+        .shadow(color: .black.opacity(0.20), radius: 4, x: 2, y: 4)
         .accessibilityHidden(true)
     }
 }
