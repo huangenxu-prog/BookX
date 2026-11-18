@@ -2,6 +2,9 @@ name: BookX
 options:
   bundleIdPrefix: com.huangenxu
 packages:
+  Readium:
+    url: https://github.com/readium/swift-toolkit.git
+    from: 3.8.0
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
     from: 0.9.19
@@ -19,6 +22,12 @@ targets:
       properties:
         UILaunchScreen: {}
     dependencies:
+      - package: Readium
+        product: ReadiumShared
+      - package: Readium
+        product: ReadiumStreamer
+      - package: Readium
+        product: ReadiumNavigator
       - package: ZIPFoundation
     settings:
       base:
