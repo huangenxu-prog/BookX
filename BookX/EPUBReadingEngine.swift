@@ -47,12 +47,15 @@ enum EPUBReadingEngine {
         // Parse only the requested XHTML resource, keeping its ordered image references.
         // The text pagination remains unchanged until rich pages can render the images.
         let blocks = (try? await BookDocumentLoader.epubBlocks(source, resource: index.resources[resource])) ?? []
+        // Keep a rolling text anchor across adjacent XHTML blocks. An image
+        // following a short paragraph must still be anchored to preceding prose,
+        // rather than losing the context of the previous block.
         var precedingText = ""
         var images: [EPUBChapterImage] = []
         for block in blocks {
             switch block.kind {
             case .text(let value):
-                precedingText = String(value.suffix(100))
+                precedingText = String((precedingText + value).suffix(160))
             case .image(let path, let alternative):
                 images.append(EPUBChapterImage(path: path, alternative: alternative,
                                                precedingText: precedingText))
