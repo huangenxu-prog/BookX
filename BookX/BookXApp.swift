@@ -403,48 +403,35 @@ struct RootView: View {
     }
     @ViewBuilder private var libraryContent: some View {
         if library.books.isEmpty {
-            ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入 TXT 或 EPUB"))
+            ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入电子书"))
                 .padding(.top, 45)
         } else {
-            let letters = Array(Set(sortedBooks.map { initial($0.title) })).sorted()
-            ForEach(letters, id: \.self) { letter in
-                Text(letter)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(BookXStyle.purple)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 15).padding(.vertical, 5)
-                    .background(BookXStyle.lilac.opacity(0.55), in: Capsule())
-                ForEach(sortedBooks.filter { initial($0.title) == letter }) { book in
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: 2), spacing: 28) {
+                ForEach(sortedBooks) { book in
                     Button { selected = book } label: {
-                        HStack(spacing: 14) {
-                            BookCover(title: book.title, large: false).frame(width: 60)
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(book.title)
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundStyle(BookXStyle.ink)
-                                    .lineLimit(2)
-                                    .truncationMode(.tail)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                if !book.author.isEmpty {
-                                    Text(book.author).font(.subheadline).foregroundStyle(BookXStyle.muted).lineLimit(1).truncationMode(.tail)
-                                }
+                        VStack(alignment: .leading, spacing: 9) {
+                            BookCover(title: book.title, large: true)
+                                .frame(maxWidth: .infinity)
+                            HStack(spacing: 5) {
+                                Text(book.lastRead == nil ? "未读" : "\(Int(book.progress * 100))%")
+                                    .font(.caption)
+                                    .foregroundStyle(BookXStyle.muted)
+                                Spacer(minLength: 0)
+                                Image(systemName: "ellipsis")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(BookXStyle.muted)
                             }
-                            Image(systemName: "chevron.right").foregroundStyle(BookXStyle.purple)
-                                .frame(width: 20)
+                            Text(book.title)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(BookXStyle.ink)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(BookXStyle.panel, in: RoundedRectangle(cornerRadius: 18))
-                        .shadow(color: BookXStyle.purple.opacity(0.08), radius: 12, y: 5)
-                    }.buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier("library-book-" + book.title)
                     .contextMenu {
                         Button("删除书籍", role: .destructive) { pendingDeletion = book }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) { pendingDeletion = book } label: {
-                            Label("删除", systemImage: "trash")
-                        }
                     }
                 }
             }
