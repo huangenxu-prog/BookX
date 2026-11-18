@@ -120,9 +120,11 @@ enum BookDocumentLoader {
     /// Extract a single spine resource without parsing the rest of the book.
     static func epubChapter(_ url: URL, resource: EPUBResource) throws -> String {
         let archive = try Archive(url: url, accessMode: .read)
-        guard let entry = archive[resource.path], entry.type == .file,
-              entry.uncompressedSize <= 16 * 1024 * 1024 else {
-            throw BookReadError.invalid("EPUB 章节缺失或过大。")
+        guard let entry = archive[resource.path], entry.type == .file else {
+            throw BookReadError.invalid("EPUB 章节文件不存在：\(resource.path)。")
+        }
+        guard entry.uncompressedSize <= 16 * 1024 * 1024 else {
+            throw BookReadError.invalid("EPUB 章节超过 16 MB：\(resource.path)。")
         }
         var data = Data()
         _ = try archive.extract(entry) { try Task.checkCancellation(); data.append($0) }
