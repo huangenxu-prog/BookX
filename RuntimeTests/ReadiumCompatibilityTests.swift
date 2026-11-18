@@ -45,7 +45,7 @@ final class ReadiumCompatibilityTests: XCTestCase {
                 }
                 try await Task.sleep(nanoseconds: 250_000_000)
             }
-            XCTAssertTrue(rendered, "Readium must render both CSS and the embedded image")
+            XCTAssertTrue(rendered, "Readium must render both CSS and the embedded image in \(name); verify navigation completion and WebKit resource loading")
             let moved = await navigator.go(to: publication.readingOrder[1], options: .init())
             XCTAssertTrue(moved)
             let locator = try XCTUnwrap(navigator.currentLocation)
@@ -62,7 +62,14 @@ final class ReadiumCompatibilityTests: XCTestCase {
         host.loadViewIfNeeded()
         host.view.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
         host.view.layoutIfNeeded()
-        let controller = try XCTUnwrap(host.children.first as? UIPageViewController)
+        func findCurl(_ root: UIViewController) -> UIPageViewController? {
+            if let page = root as? UIPageViewController { return page }
+            for child in root.children {
+                if let found = findCurl(child) { return found }
+            }
+            return nil
+        }
+        let controller = try XCTUnwrap(findCurl(host), "SwiftUI may nest the page controller under hosting containers")
         XCTAssertEqual(controller.transitionStyle, .pageCurl)
     }
 }
