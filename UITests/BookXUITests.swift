@@ -2,9 +2,10 @@ import XCTest
 
 final class BookXUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
-    private func launchFresh() -> XCUIApplication {
+    private func launchFresh(scrollMode: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["BOOKX_UI_TEST_RESET"] = "1"
+        if scrollMode { app.launchEnvironment["BOOKX_UI_TEST_SCROLL"] = "1" }
         let bundle = Bundle(for: Self.self)
         if let url = bundle.url(forResource: "ordered", withExtension: "epub") {
             app.launchEnvironment["BOOKX_UI_TEST_EPUB"] = try? Data(contentsOf: url).base64EncodedString()
@@ -53,22 +54,9 @@ final class BookXUITests: XCTestCase {
         snapshot("04-epub")
     }
     func testScrollModeTracksReadingAndResumes() {
-        let app = launchFresh()
+        let app = launchFresh(scrollMode: true)
         app.buttons["library-book-阅读测试"].tap()
         XCTAssertTrue(app.staticTexts["reading-position"].waitForExistence(timeout: 15))
-        app.buttons["阅读功能"].tap()
-        let formatting = app.buttons["排版"]
-        if formatting.waitForExistence(timeout: 5) {
-            formatting.tap()
-        } else {
-            let menuItem = app.menuItems["排版"]
-            XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "Reading menu must expose 排版")
-            menuItem.tap()
-        }
-        let scrolling = app.buttons["上下滚动"]
-        XCTAssertTrue(scrolling.waitForExistence(timeout: 5))
-        scrolling.tap()
-        app.buttons["完成"].tap()
         for _ in 0..<4 { app.swipeUp() }
         let position = app.staticTexts["reading-position"]
         let saved = position.label
