@@ -80,7 +80,12 @@ enum EPUBContentParser {
             let decoded = relative.removingPercentEncoding ?? relative
             let base = URL(fileURLWithPath: "/" + chapterPath).deletingLastPathComponent()
             let resolved = base.appendingPathComponent(decoded).standardizedFileURL.path
-            guard resolved.hasPrefix("/"), !resolved.hasPrefix("/../") else { return nil }
+            // Reject traversal outside the EPUB root, including normalized ../ paths.
+            // A simple check for /../ after standardization is insufficient because
+            // standardization removes those segments before this check runs.
+            let normalizedRoot = URL(fileURLWithPath: "/").standardizedFileURL.path
+            guard resolved.hasPrefix(normalizedRoot),
+                  !decoded.split(separator: "/").contains("..") else { return nil }
             return String(resolved.dropFirst())
         }
     }
