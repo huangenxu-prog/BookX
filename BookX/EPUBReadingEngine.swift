@@ -6,10 +6,19 @@ struct EPUBLocation: Codable, Sendable, Hashable {
     let offset: Int // UTF-16 position within the resource, independent of font or viewport.
 }
 
+struct EPUBChapterImage: Sendable, Equatable {
+    let path: String
+    let alternative: String
+    let precedingText: String
+}
+
 struct EPUBChapterPages: Sendable {
     let resource: Int
     let length: Int
     let pages: [ReadingPage]
+    // Retain illustration placement for the upcoming rich-page renderer.
+    // Do not inject image placeholders into the UTF-16 bookmark stream.
+    var images: [EPUBChapterImage] = []
 }
 
 struct ReadingLayout: Sendable {
@@ -35,7 +44,22 @@ enum EPUBReadingEngine {
         let pages = try layout.pages(text).map {
             ReadingPage(offset: $0.offset, text: $0.text, resourceIndex: resource)
         }
-        return EPUBChapterPages(resource: resource, length: text.utf16.count, pages: pages)
+        // Parse only the requested XHTML resource, keeping its ordered image references.
+        // The text pagination remains unchanged until rich pages can render the images.
+        let blocks = try await BookDocumentLoader.epubBlocks(source, resource: index.resources[resource])
+        var precedingText = ""
+        var images: [EPUBChapterImage] = []
+        for block in blocks {
+            switch block.kind {
+            case .text(let value):
+                precedingText = String(value.suffix(100))
+            case .image(let path, let alternative):
+                images.append(EPUBChapterImage(path: path, alternative: alternative,
+                                               precedingText: precedingText))
+            }
+        }
+        return EPUBChapterPages(resource: resource, length: text.utf16.count,
+                                pages: pages, images: images)
     }
     static func readableChapter(_ source: URL, index: EPUBResourceIndex, startingAt resource: Int,
                                 direction: Int, layout: ReadingLayout) async throws -> EPUBChapterPages? {
