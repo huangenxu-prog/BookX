@@ -64,6 +64,38 @@ enum ScreenPagination {
 #if canImport(UIKit)
 import SwiftUI
 
+
+/// Loads only the currently displayed EPUB illustration; no full-book decoding.
+struct EPUBIllustrationView: View {
+    let bookURL: URL
+    let path: String
+    let alternative: String
+    @State private var illustration: UIImage?
+
+    var body: some View {
+        Group {
+            if let illustration {
+                Image(uiImage: illustration)
+                    .resizable()
+                    .scaledToFit()
+                    .accessibilityLabel(alternative.isEmpty ? "书籍插图" : alternative)
+            } else {
+                ProgressView()
+                    .accessibilityLabel("正在加载插图")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .task(id: path) {
+            illustration = nil
+            guard let bytes = try? await BookDocumentLoader.epubImageData(bookURL, path: path),
+                  !Task.isCancelled else { return }
+            illustration = UIImage(data: bytes)
+        }
+    }
+}
+
 struct ScreenPageView: UIViewRepresentable {
     let text: String
     let fontSize: Double
