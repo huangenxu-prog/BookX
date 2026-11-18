@@ -239,6 +239,7 @@ private struct BookSpine: View {
     let title: String
     let seed: Int
     let styleIndex: Int
+    let width: CGFloat
 
     private var index: Int { styleIndex % 9 }
     private var isLight: Bool { [0, 2, 6].contains(index) }
@@ -259,7 +260,7 @@ private struct BookSpine: View {
         switch index {
         case 0, 2, 6: return "LinenIvory"
         case 5: return "LeatherBrown"
-        case 7, 8: return "LeatherCharcoal"
+        case 8: return "LeatherCharcoal"
         default: return "LeatherGreen"
         }
     }
@@ -326,14 +327,14 @@ private struct BookSpine: View {
                 VStack(spacing: 0) {
                     ForEach(Array(spineTitle.enumerated()), id: \.offset) { _, character in
                         Text(String(character))
-                            .font(.system(size: 19, weight: .semibold, design: .serif))
+                            .font(.system(size: 18, weight: .semibold, design: .serif))
                             .fixedSize()
                     }
                 }
                 .foregroundStyle(ink)
                 .shadow(color: .black.opacity(0.20), radius: 0.7, y: 1)
                 Spacer(minLength: 5)
-                if UIImage(named: ["OrnamentWaves", "OrnamentMountains", "OrnamentFloral"][index % 3]) != nil {
+                if false && UIImage(named: ["OrnamentWaves", "OrnamentMountains", "OrnamentFloral"][index % 3]) != nil {
                     Image(["OrnamentWaves", "OrnamentMountains", "OrnamentFloral"][index % 3])
                         .resizable()
                         .scaledToFit()
@@ -345,11 +346,11 @@ private struct BookSpine: View {
                 }
                 Rectangle().fill(ink.opacity(0.70)).frame(height: 0.8)
             }
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 5)
             .padding(.vertical, 12)
         }
-        .frame(width: 49, height: 230)
-        .clipped()
+        .frame(width: width, height: 230)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
         .shadow(color: .black.opacity(0.20), radius: 4, x: 2, y: 4)
         .accessibilityHidden(true)
     }
@@ -762,8 +763,8 @@ struct RootView: View {
             // turning a book spine into a full cover or pushing books off screen.
             GeometryReader { geometry in
                 let availableWidth = max(0, geometry.size.width)
-                let spineWidth = min(49, max(37, (availableWidth - 70) / 5))
-                let gap = max(11, (availableWidth - spineWidth * 5) / 6)
+                let spineWidth = min(43, max(33, (availableWidth - 108) / 5))
+                let gap = max(13, (availableWidth - spineWidth * 5) / 6)
                 VStack(spacing: 24) {
                     ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 5)), id: \.self) { start in
                         VStack(spacing: 0) {
@@ -772,7 +773,8 @@ struct RootView: View {
                                     Button { takeBook(book) } label: {
                                         BookSpine(title: book.title,
                                                   seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) },
-                                                  styleIndex: (start + offset) % 9)
+                                                  styleIndex: (start + offset) % 9,
+                                                  width: spineWidth)
                                             .frame(width: spineWidth, height: 230)
                                             .clipped()
                                             .offset(y: pullingBook == book.id ? -22 : 0)
