@@ -22,4 +22,20 @@ final class EPUBContentParserTests: XCTestCase {
         XCTAssertEqual(try EPUBContentParser.blocks(Data(html.utf8), chapterPath: "text/1.xhtml"),
                        [EPUBContentBlock(kind: .text("正文"))])
     }
+    func testIllustratedEPUBIndexAndImageExtraction() throws {
+        let original = try XCTUnwrap(Bundle.module.resourceURL?.appendingPathComponent("Fixtures/illustrated.epub"))
+        let index = try BookDocumentLoader.epubIndex(original)
+        XCTAssertEqual(index.resources.count, 1)
+        let blocks = try EPUBContentParser.blocks(
+            Data("<html><body><p>图前文字</p><img src=\"../Images/figure%201.png\"/><p>图后文字</p></body></html>".utf8),
+            chapterPath: index.resources[0].path)
+        XCTAssertEqual(blocks.count, 3)
+        guard case let .image(path, _) = blocks[1].kind else {
+            return XCTFail("Image block missing")
+        }
+        let image = try BookDocumentLoader.epubImageData(original, path: path)
+        XCTAssertTrue(image.starts(with: [137, 80, 78, 71]))
+        XCTAssertThrowsError(try BookDocumentLoader.epubImageData(original, path: "../outside.png"))
+    }
+
 }
