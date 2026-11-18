@@ -75,8 +75,15 @@ final class ReadiumCompatibilityTests: XCTestCase {
             }
             let moved = await navigator.go(to: publication.readingOrder[1], options: .init())
             XCTAssertTrue(moved)
-            let locator = try XCTUnwrap(navigator.currentLocation)
-            XCTAssertTrue(locator.href.string.contains("two.xhtml"))
+            // Readium updates currentLocation after the navigation state returns to idle.
+            // go(to:) can succeed before the deferred location notification is processed.
+            var locationHref = navigator.currentLocation?.href.string ?? ""
+            for _ in 0..<40 where !locationHref.contains("two.xhtml") {
+                try await Task.sleep(nanoseconds: 250_000_000)
+                locationHref = navigator.currentLocation?.href.string ?? ""
+            }
+            XCTAssertTrue(locationHref.contains("two.xhtml"),
+                          "Readium navigation succeeded but currentLocation stayed at: \(locationHref)")
         }
 
         // The production reader must still instantiate UIKit's pageCurl.
