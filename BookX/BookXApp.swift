@@ -62,7 +62,7 @@ final class BookLibrary: ObservableObject {
         // Only a DEBUG UI-test launch may clear its own app sandbox.
         for book in books { try? fm.removeItem(at: fileURL(book)) }
         books = []
-        fontSize = 19; lineSpacing = 8; paper = 1; pageMode = 0
+        fontSize = 19; lineSpacing = 8; paper = 1; pageMode = environment["BOOKX_UI_TEST_SCROLL"] == "1" ? 3 : 0
         save()
         let temporary = fm.temporaryDirectory.appendingPathComponent("BookX-UI", isDirectory: true)
         try? fm.createDirectory(at: temporary, withIntermediateDirectories: true)
