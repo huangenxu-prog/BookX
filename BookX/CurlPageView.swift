@@ -7,6 +7,7 @@ struct CurlPageView: UIViewControllerRepresentable {
     static let footerHeight: CGFloat = 28
 
     let pages: [ReadingPage]
+    let bookURL: URL?
     @Binding var currentPage: Int
     let fontSize: Double
     let lineSpacing: Double
@@ -99,10 +100,17 @@ struct CurlPageView: UIViewControllerRepresentable {
                     parent.header
                         .padding(.top, parent.topInset)
                         .frame(height: CurlPageView.headerHeight + parent.topInset)
-                    ScreenPageView(text: pages[index].text, fontSize: fontSize,
-                                   lineSpacing: lineSpacing, ink: parent.ink)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
+                    Group {
+                        if let path = pages[index].imagePath, let bookURL = parent.bookURL {
+                            EPUBIllustrationView(bookURL: bookURL, path: path,
+                                                 alternative: pages[index].text)
+                        } else {
+                            ScreenPageView(text: pages[index].text, fontSize: fontSize,
+                                           lineSpacing: lineSpacing, ink: parent.ink)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
                     Text(parent.positionLabels.indices.contains(index) ? parent.positionLabels[index] : "")
                         .font(.caption)
                         .foregroundStyle(parent.ink.opacity(0.65))
@@ -144,7 +152,9 @@ struct CurlPageView: UIViewControllerRepresentable {
             parent = pendingParent ?? parent
             pendingParent = nil
             if completed, let displayed,
-               let restored = parent.pages.firstIndex(where: { $0.location == displayed.location }) {
+               let restored = parent.pages.firstIndex(where: {
+                   $0.location == displayed.location && $0.imagePath == displayed.imagePath
+               }) {
                 parent.currentPage = restored
             }
             apply(parent, to: pageViewController)
