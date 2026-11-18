@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(ReadiumZIPFoundation)
+import ReadiumZIPFoundation
+#else
 import ZIPFoundation
+#endif
 import UIKit
 
 enum EPUBReaderError: LocalizedError {
