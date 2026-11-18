@@ -179,7 +179,11 @@ struct ReaderView: View {
                 Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
                     .accessibilityLabel("返回")
                 Spacer()
-                Text(book.title).font(.subheadline).lineLimit(1).truncationMode(.tail)
+                Text(book.title)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(ink.opacity(0.48))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                     .frame(maxWidth: .infinity)
                 Spacer()
                 Menu {
