@@ -31,21 +31,27 @@ final class ReadiumCompatibilityTests: XCTestCase {
             defer { window.isHidden = true; window.rootViewController = nil }
 
             var rendered = false
+            var lastProbe = "no JavaScript result"
             for _ in 0..<80 {
-                if case .success(let value) = await navigator.evaluateJavaScript("""
+                let result = await navigator.evaluateJavaScript("""
                     (() => {
                         const p = document.getElementById('styled');
                         const img = document.querySelector('img');
                         return !!p && !!img && img.complete && img.naturalWidth > 0
                             && getComputedStyle(p).color === 'rgb(121, 33, 44)';
                     })()
-                    """), (value as? Bool) == true {
-                    rendered = true
-                    break
+                    """)
+                switch result {
+                case .success(let value):
+                    lastProbe = "result=\(String(describing: value))"
+                    if (value as? Bool) == true { rendered = true }
+                case .failure(let error):
+                    lastProbe = "error=\(error.localizedDescription)"
                 }
+                if rendered { break }
                 try await Task.sleep(nanoseconds: 250_000_000)
             }
-            XCTAssertTrue(rendered, "Readium must render both CSS and the embedded image in \(name); verify navigation completion and WebKit resource loading")
+            XCTAssertTrue(rendered, "Readium render failed for \(name): \(lastProbe)")
             let moved = await navigator.go(to: publication.readingOrder[1], options: .init())
             XCTAssertTrue(moved)
             let locator = try XCTUnwrap(navigator.currentLocation)
