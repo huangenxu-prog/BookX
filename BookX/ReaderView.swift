@@ -250,7 +250,9 @@ struct ReaderView: View {
             let saved = library.books.first(where: { $0.id == book.id }) ?? book
             let savedOffset = saved.readingOffset
             let (parsed, result, partial) = try await readerWorker {
-                let parsed = try cached ?? BookDocumentStore.load(url)
+                let parsed: BookDocument
+                if let cached { parsed = cached }
+                else { parsed = try await BookDocumentStore.load(url) }
                 if let ready = BookPageStore.load(url, key: layoutKey) {
                     return (parsed, ready, false)
                 }
