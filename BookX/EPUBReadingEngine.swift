@@ -46,7 +46,7 @@ enum EPUBReadingEngine {
         }
         // Parse only the requested XHTML resource, keeping its ordered image references.
         // The text pagination remains unchanged until rich pages can render the images.
-        let blocks = try await BookDocumentLoader.epubBlocks(source, resource: index.resources[resource])
+        let blocks = (try? await BookDocumentLoader.epubBlocks(source, resource: index.resources[resource])) ?? []
         var precedingText = ""
         var images: [EPUBChapterImage] = []
         for block in blocks {
