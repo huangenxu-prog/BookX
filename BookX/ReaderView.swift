@@ -64,13 +64,21 @@ struct ReaderView: View {
                     ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else if library.pageMode == 0 {
-                CurlPageView(pages: pages, currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset, contentID: windowRevision, positionLabels: pages.indices.map(positionLabel))
+                CurlPageView(pages: pages, bookURL: epubIndex == nil ? nil : library.fileURL(book), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset, contentID: windowRevision, positionLabels: pages.indices.map(positionLabel))
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .clipped()
             } else if library.pageMode == 1 {
                 TabView(selection: $currentPage) {
                     ForEach(pages.indices, id: \.self) { i in
-                        ScreenPageView(text: pages[i].text, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink).tag(i)
+                        Group {
+                            if let path = pages[i].imagePath, epubIndex != nil {
+                                EPUBIllustrationView(bookURL: library.fileURL(book), path: path,
+                                                     alternative: pages[i].text)
+                            } else {
+                                ScreenPageView(text: pages[i].text, fontSize: library.fontSize,
+                                               lineSpacing: library.lineSpacing, ink: ink)
+                            }
+                        }.tag(i)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -78,7 +86,15 @@ struct ReaderView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(pages, id: \.location) { page in
-                            pageText(page.text).id(page.location)
+                            Group {
+                                if let path = page.imagePath, epubIndex != nil {
+                                    EPUBIllustrationView(bookURL: library.fileURL(book), path: path,
+                                                         alternative: page.text)
+                                        .frame(height: max(240, geometry.size.height * 0.75))
+                                } else {
+                                    pageText(page.text)
+                                }
+                            }.id(page.location)
                         }
                     }
                     .scrollTargetLayout()
