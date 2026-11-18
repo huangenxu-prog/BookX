@@ -37,20 +37,36 @@ final class ReadiumCompatibilityTests: XCTestCase {
                     (() => {
                         const p = document.getElementById('styled');
                         const img = document.querySelector('img');
-                        return !!p && !!img && img.complete && img.naturalWidth > 0
-                            && getComputedStyle(p).color === 'rgb(121, 33, 44)';
+                        return JSON.stringify({
+                            url: document.URL,
+                            readyState: document.readyState,
+                            text: document.body?.innerText?.slice(0, 100),
+                            paragraph: !!p,
+                            color: p ? getComputedStyle(p).color : null,
+                            image: !!img,
+                            imageComplete: img?.complete,
+                            imageWidth: img?.naturalWidth,
+                            imageURL: img?.currentSrc,
+                            stylesheets: document.styleSheets.length
+                        });
                     })()
                     """)
                 switch result {
                 case .success(let value):
                     lastProbe = "result=\(String(describing: value))"
-                    if (value as? Bool) == true { rendered = true }
+                    if let json = value as? String,
+                       let data = json.data(using: .utf8),
+                       let probe = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       (probe["paragraph"] as? Bool) == true,
+                       (probe["imageWidth"] as? Int ?? 0) > 0,
+                       (probe["color"] as? String) == "rgb(121, 33, 44)" { rendered = true }
                 case .failure(let error):
                     lastProbe = "error=\(error.localizedDescription)"
                 }
                 if rendered { break }
                 try await Task.sleep(nanoseconds: 250_000_000)
             }
+            if !rendered { NSLog("READIUM_RENDER_DIAGNOSTIC %@ %@", name, lastProbe) }
             XCTAssertTrue(rendered, "Readium render failed for \(name): \(lastProbe)")
             let moved = await navigator.go(to: publication.readingOrder[1], options: .init())
             XCTAssertTrue(moved)
