@@ -1,5 +1,4 @@
 import Foundation
-import FoundationXML
 
 /// EPUB content is not equivalent to plain text. This intermediate representation
 /// retains image placement without changing the existing pagination engine yet.
@@ -38,7 +37,8 @@ enum EPUBContentParser {
             if Task.isCancelled { parser.abortParsing(); return }
             let name = elementName.lowercased()
             if name == "body" { inBody = true }
-            if ignored > 0 || ["script", "style", "nav"].contains(name) { ignored += 1; return }
+            if ignored > 0 { ignored += 1; return }
+            if ["script", "style", "nav"].contains(name) { ignored = 1; return }
             guard inBody else { return }
             if name == "img" || name == "image" {
                 flush()
