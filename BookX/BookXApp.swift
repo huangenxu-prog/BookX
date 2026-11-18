@@ -112,7 +112,7 @@ final class BookLibrary: ObservableObject {
             if Task.isCancelled { break }
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            guard ["txt", "epub", "md", "markdown", "rtf", "html", "htm"].contains(url.pathExtension.lowercased()) else { continue }
+            guard ["txt", "epub", "md", "markdown", "rtf", "html", "htm", "fb2"].contains(url.pathExtension.lowercased()) else { continue }
             let name = UUID().uuidString + "." + url.pathExtension.lowercased()
             do {
                 try fm.copyItem(at: url, to: folder.appendingPathComponent(name))
@@ -297,7 +297,7 @@ struct RootView: View {
         .tint(BookXStyle.purple)
         .fileImporter(isPresented: $importer, allowedContentTypes: [.plainText, UTType(filenameExtension: "epub") ?? .data,
             UTType(filenameExtension: "md") ?? .plainText,
-            UTType(filenameExtension: "markdown") ?? .plainText, .rtf, .html], allowsMultipleSelection: true) { result in
+            UTType(filenameExtension: "markdown") ?? .plainText, .rtf, .html, UTType(filenameExtension: "fb2") ?? .xml], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await library.importFiles(urls) }
             case .failure(let error): library.importError = error.localizedDescription
