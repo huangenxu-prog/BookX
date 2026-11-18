@@ -25,3 +25,5 @@ __pycache__/
 
 SimulatorBuild/
 runtime-tests.log
+Tests/Fixtures/readium2.epub
+Tests/Fixtures/readium3.epub

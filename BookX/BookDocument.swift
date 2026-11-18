@@ -375,11 +375,23 @@ enum EPUBResourceStore {
         let target = indexURL(source)
         if let data = try? Data(contentsOf: target),
            let cached = try? PropertyListDecoder().decode(IndexEntry.self, from: data),
-           cached.version == 3, cached.source == source.standardizedFileURL.path, cached.sourceSize == size, cached.modified == modified {
+           cached.version == 4, cached.source == source.standardizedFileURL.path, cached.sourceSize == size, cached.modified == modified {
             return cached.index
         }
-        let result = try await BookDocumentLoader.epubIndex(source)
-        let entry = IndexEntry(version: 3, sourceSize: size, modified: modified, source: source.standardizedFileURL.path, index: result)
+        let result: EPUBResourceIndex
+        #if canImport(ReadiumStreamer)
+        do {
+            result = try await ReadiumPublicationStore.shared.index(source)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Historical, malformed books can still use the existing reader.
+            result = try await BookDocumentLoader.epubIndex(source)
+        }
+        #else
+        result = try await BookDocumentLoader.epubIndex(source)
+        #endif
+        let entry = IndexEntry(version: 4, sourceSize: size, modified: modified, source: source.standardizedFileURL.path, index: result)
         if let data = try? PropertyListEncoder().encode(entry) {
             try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
                                                      withIntermediateDirectories: true)

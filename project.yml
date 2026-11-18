@@ -54,6 +54,26 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGNING_ALLOWED: NO
+  BookXRuntimeTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: RuntimeTests
+      - path: Tests/Fixtures/readium2.epub
+        buildPhase: resources
+      - path: Tests/Fixtures/readium3.epub
+        buildPhase: resources
+    dependencies:
+      - target: BookX
+      - package: Readium
+        product: ReadiumShared
+      - package: Readium
+        product: ReadiumNavigator
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
 schemes:
   BookX:
     build:
@@ -62,3 +82,4 @@ schemes:
     test:
       targets:
         - BookXUITests
+        - BookXRuntimeTests
