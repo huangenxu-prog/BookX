@@ -66,8 +66,13 @@ final class ReadiumCompatibilityTests: XCTestCase {
                 if rendered { break }
                 try await Task.sleep(nanoseconds: 250_000_000)
             }
-            if !rendered { NSLog("READIUM_RENDER_DIAGNOSTIC %@ %@", name, lastProbe) }
-            XCTAssertTrue(rendered, "Readium render failed for \(name): \(lastProbe)")
+            if !rendered {
+                let attachment = XCTAttachment(string: "Publication: \(name)\nWebKit: \(lastProbe)")
+                attachment.name = "Readium-WebKit-\(name)-diagnostics"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                XCTFail("Readium \(name) failed; WebKit diagnostic: \(lastProbe)")
+            }
             let moved = await navigator.go(to: publication.readingOrder[1], options: .init())
             XCTAssertTrue(moved)
             let locator = try XCTUnwrap(navigator.currentLocation)
