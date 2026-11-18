@@ -351,7 +351,9 @@ struct ReaderView: View {
               let index = epubIndex, let chapter = epubWindow[resource] else {
             return "\(page + 1) / \(pages.count)"
         }
-        let local = BookPagination.pageIndex(for: pages[page].offset, in: chapter.pages)
+        // Image sheets can share their preceding text page's UTF-16 offset.
+        // Resolve the actual sheet ordinal, not the nearest text bookmark.
+        let local = pages[..<page].filter { $0.resourceIndex == resource }.count
         return "\(resource + 1)/\(index.resources.count)章 · \(local + 1)/\(chapter.pages.count)页"
     }
     private func isCurrentChapter(_ index: Int) -> Bool {
