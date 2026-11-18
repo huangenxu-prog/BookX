@@ -663,7 +663,7 @@ private final class FB2TextReader: NSObject, XMLParserDelegate {
         }
         guard inMainBody else { return }
         if inSectionTitle { sectionTitle += string }
-        else if ["p", "v", "subtitle", "text-author"].contains(elements.last ?? "") { body += string }
+        else if elements.contains(where: { ["p", "v", "subtitle", "text-author"].contains($0) }) { body += string }
     }
 
     func parser(_ parser: XMLParser, didEndElement elementName: String,
