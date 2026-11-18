@@ -272,8 +272,8 @@ private struct BookSpine: View {
                 .frame(width: width, height: 230)
                 .clipped()
             VStack(spacing: 0) {
-                ForEach(Array(spineTitle.prefix(11).enumerated()), id: \.offset) { _, character in
-                    Text(String(character))
+                ForEach(Array(spineTitle.prefix(11).enumerated()), id: \.offset) { entry in
+                    Text(String(entry.element))
                         .font(.system(size: titleSize, weight: .semibold, design: .serif))
                         .fixedSize()
                 }
