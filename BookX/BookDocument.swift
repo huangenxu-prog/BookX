@@ -43,6 +43,7 @@ enum BookDocumentLoader {
         guard fileSize <= limit else { throw BookReadError.invalid("文件过大，当前格式上限为 \(limit / 1024 / 1024) MB。") }
         let data = try Data(contentsOf: url)
         try Task.checkCancellation()
+        if ext == "fb2" { return try FB2TextReader.parse(data) }
         if ext == "rtf" {
             guard data.count <= 20 * 1024 * 1024 else {
                 throw BookReadError.invalid("RTF 文件超过 20 MB。")
@@ -604,5 +605,89 @@ enum BookPageStore {
         for file in entries where file.lastPathComponent.hasPrefix(source.lastPathComponent + "-") {
             try? FileManager.default.removeItem(at: file)
         }
+    }
+}
+
+
+// FB2 is an XML-based ebook format. Keep its parsing independent of EPUB archives.
+private final class FB2TextReader: NSObject, XMLParserDelegate {
+    private var elements: [String] = []
+    private var body = ""
+    private var bookTitle = ""
+    private var authors: [String] = []
+    private var authorParts: [String] = []
+    private var chapters: [BookChapter] = []
+    private var sectionDepth = 0
+    private var sectionTitle = ""
+    private var inSectionTitle = false
+    private var inMainBody = false
+    private var inAuthor = false
+    private var inBookTitle = false
+    private var inBinary = false
+
+    static func parse(_ data: Data) throws -> BookDocument {
+        let reader = FB2TextReader()
+        let parser = XMLParser(data: data)
+        parser.shouldResolveExternalEntities = false
+        parser.delegate = reader
+        guard parser.parse() else {
+            throw BookReadError.invalid("FB2 XML 解析失败：\(parser.parserError?.localizedDescription ?? "格式无效")")
+        }
+        let text = reader.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw BookReadError.invalid("FB2 没有可读取的正文。") }
+        return BookDocument(title: reader.bookTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                            author: reader.authors.joined(separator: "、"), text: text,
+                            chapters: reader.chapters)
+    }
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String,
+                namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
+        if Task.isCancelled { parser.abortParsing(); return }
+        let name = elementName.split(separator: ":").last.map(String.init) ?? elementName
+        elements.append(name)
+        if name == "binary" { inBinary = true }
+        if name == "body" && !inMainBody && attributes["name"] == nil { inMainBody = true }
+        if name == "author" && elements.contains("title-info") { inAuthor = true; authorParts = [] }
+        if name == "book-title" && elements.contains("title-info") { inBookTitle = true }
+        if inMainBody && name == "section" { sectionDepth += 1 }
+        if inMainBody && name == "title" && sectionDepth > 0 { inSectionTitle = true; sectionTitle = "" }
+        if inMainBody && name == "p" && !body.isEmpty && !body.hasSuffix("\n") { body += "\n" }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if inBinary { return }
+        if inBookTitle { bookTitle += string; return }
+        if inAuthor && ["first-name", "middle-name", "last-name", "nickname"].contains(elements.last ?? "") {
+            authorParts.append(string)
+            return
+        }
+        guard inMainBody else { return }
+        if inSectionTitle { sectionTitle += string }
+        else if ["p", "v", "subtitle", "text-author"].contains(elements.last ?? "") { body += string }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String,
+                namespaceURI: String?, qualifiedName: String?) {
+        let name = elementName.split(separator: ":").last.map(String.init) ?? elementName
+        if name == "binary" { inBinary = false }
+        if name == "book-title" { inBookTitle = false }
+        if name == "author" && inAuthor {
+            let value = authorParts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { authors.append(value) }
+            inAuthor = false
+        }
+        if inMainBody && name == "title" && inSectionTitle {
+            let title = sectionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !title.isEmpty {
+                if !body.isEmpty { body += "\n\n" }
+                chapters.append(BookChapter(title: title, offset: body.utf16.count))
+                body += title + "\n\n"
+            }
+            inSectionTitle = false
+        }
+        if inMainBody && ["p", "v", "subtitle", "empty-line"].contains(name) { body += "\n" }
+        if inMainBody && name == "section" { sectionDepth = max(0, sectionDepth - 1) }
+        if name == "body" && inMainBody { inMainBody = false }
+        if !elements.isEmpty { elements.removeLast() }
     }
 }
