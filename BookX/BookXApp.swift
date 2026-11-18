@@ -459,6 +459,42 @@ private struct BookOpeningOverlay: View {
     }
 }
 
+
+private struct ReaderOpeningTransition: View {
+    let book: BookItem
+    @EnvironmentObject private var library: BookLibrary
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showingOpening = true
+
+    var body: some View {
+        ZStack {
+            ReaderView(book: book)
+                .environmentObject(library)
+            if showingOpening && !reduceMotion {
+                BookOpeningOverlay(title: book.title, stage: 3)
+                    .opacity(showingOpening ? 1 : 0)
+                    .transition(.opacity)
+                    .zIndex(1)
+                    .accessibilityHidden(true)
+            }
+        }
+        .onAppear {
+            guard !reduceMotion else {
+                showingOpening = false
+                return
+            }
+            // Keep the final opening frame above the reader while the full-screen
+            // presentation settles; then dissolve instead of abruptly removing it.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(220))
+                withAnimation(.easeOut(duration: 0.42)) {
+                    showingOpening = false
+                }
+            }
+        }
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var library: BookLibrary
     @State private var tab = 0
@@ -574,7 +610,8 @@ struct RootView: View {
                 SettingsView().environmentObject(library).presentationDetents([.medium, .large])
             }
             .fullScreenCover(item: $selected) { book in
-                ReaderView(book: book).environmentObject(library)
+                ReaderOpeningTransition(book: book)
+                    .environmentObject(library)
             }
     }
     private var header: some View {
