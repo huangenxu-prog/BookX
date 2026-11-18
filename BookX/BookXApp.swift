@@ -239,37 +239,60 @@ private struct BookSpine: View {
     let title: String
     let seed: Int
 
-    private var color: Color {
+    private var tone: Color {
         let palette: [Color] = [
-            Color(red: 0.19, green: 0.36, blue: 0.30),
-            Color(red: 0.49, green: 0.34, blue: 0.25),
-            Color(red: 0.67, green: 0.56, blue: 0.42),
-            Color(red: 0.35, green: 0.38, blue: 0.35),
-            Color(red: 0.56, green: 0.47, blue: 0.35)
+            Color(red: 0.22, green: 0.37, blue: 0.31),
+            Color(red: 0.46, green: 0.29, blue: 0.20),
+            Color(red: 0.72, green: 0.61, blue: 0.46),
+            Color(red: 0.35, green: 0.41, blue: 0.38),
+            Color(red: 0.67, green: 0.54, blue: 0.39)
         ]
         return palette[(seed & Int.max) % palette.count]
     }
 
+    private var spineTitle: String {
+        let cleaned = title.replacingOccurrences(of: "《", with: "")
+            .replacingOccurrences(of: "》", with: "")
+        let primary = cleaned.components(separatedBy: ["（", "(", "【", "["]).first ?? cleaned
+        return String(primary.prefix(8))
+    }
+
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                RoundedRectangle(cornerRadius: 4).fill(color.gradient)
-                RoundedRectangle(cornerRadius: 3)
-                    .stroke(.white.opacity(0.26), lineWidth: 1)
-                    .padding(5)
-                Text(String(title.prefix(12)))
-                    .font(.system(size: 15, weight: .semibold, design: .serif))
-                    .foregroundStyle(.white)
-                    .lineLimit(12)
-                    .minimumScaleFactor(0.7)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 14)
+        ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(
+                    LinearGradient(colors: [
+                        tone.opacity(0.73), tone, tone.opacity(0.93), tone.opacity(0.62)
+                    ], startPoint: .leading, endPoint: .trailing)
+                )
+            RoundedRectangle(cornerRadius: 5)
+                .strokeBorder(.white.opacity(0.33), lineWidth: 1)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 8)
+            VStack(spacing: 2) {
+                Rectangle().fill(.white.opacity(0.42)).frame(height: 1)
+                Rectangle().fill(.white.opacity(0.25)).frame(height: 1)
+                Spacer(minLength: 8)
+                VStack(spacing: 1) {
+                    ForEach(Array(spineTitle.enumerated()), id: \.offset) { _, character in
+                        Text(String(character))
+                            .font(.system(size: 19, weight: .semibold, design: .serif))
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.15), radius: 1, y: 1)
+                Spacer(minLength: 8)
+                Image(systemName: "book.closed")
+                    .font(.system(size: 13, weight: .light))
+                    .foregroundStyle(.white.opacity(0.55))
+                Rectangle().fill(.white.opacity(0.3)).frame(height: 1)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 15)
         }
-        .frame(height: 220)
-        .frame(maxWidth: .infinity)
+        .frame(width: CGFloat(61 + (seed & Int.max) % 15),
+               height: CGFloat(226 + (seed & Int.max) % 18))
         .accessibilityHidden(true)
     }
 }
