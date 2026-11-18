@@ -57,7 +57,14 @@ final class BookXUITests: XCTestCase {
         app.buttons["library-book-阅读测试"].tap()
         XCTAssertTrue(app.staticTexts["reading-position"].waitForExistence(timeout: 15))
         app.buttons["阅读功能"].tap()
-        app.buttons["排版"].tap()
+        let formatting = app.buttons["排版"]
+        if formatting.waitForExistence(timeout: 5) {
+            formatting.tap()
+        } else {
+            let menuItem = app.menuItems["排版"]
+            XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "Reading menu must expose 排版")
+            menuItem.tap()
+        }
         let scrolling = app.buttons["上下滚动"]
         XCTAssertTrue(scrolling.waitForExistence(timeout: 5))
         scrolling.tap()
