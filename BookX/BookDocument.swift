@@ -143,6 +143,28 @@ enum BookDocumentLoader {
         return data
     }
 
+    /// Preserve the ordered XHTML blocks for the rich EPUB renderer.
+    /// This intentionally does not alter the legacy plain-text reading path.
+    static func epubBlocks(_ url: URL, resource: EPUBResource) throws -> [EPUBContentBlock] {
+        try Task.checkCancellation()
+        let archive = try Archive(url: url, accessMode: .read)
+        guard let entry = archive[resource.path], entry.type == .file else {
+            throw BookReadError.invalid("EPUB 章节文件不存在：\(resource.path)")
+        }
+        guard entry.uncompressedSize <= 16 * 1024 * 1024 else {
+            throw BookReadError.invalid("EPUB 章节超过 16 MB：\(resource.path)")
+        }
+        var data = Data()
+        _ = try archive.extract(entry) { chunk in
+            try Task.checkCancellation()
+            guard data.count + chunk.count <= 16 * 1024 * 1024 else {
+                throw BookReadError.invalid("EPUB 章节解压后过大。")
+            }
+            data.append(chunk)
+        }
+        return try EPUBContentParser.blocks(data, chapterPath: resource.path)
+    }
+
     /// Extract a single spine resource without parsing the rest of the book.
     static func epubChapter(_ url: URL, resource: EPUBResource) throws -> String {
         let archive = try Archive(url: url, accessMode: .read)
