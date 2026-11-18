@@ -120,10 +120,10 @@ final class BookLibrary: ObservableObject {
                 do {
                     let document = try await readerWorker {
                         if localURL.pathExtension.lowercased() == "epub" {
-                            let index = try EPUBResourceStore.index(localURL)
+                            let index = try await EPUBResourceStore.index(localURL)
                             return BookDocument(title: index.title, author: index.author, text: "")
                         }
-                        return try BookDocumentStore.load(localURL)
+                        return try await BookDocumentStore.load(localURL)
                     }
                     let id = UUID()
                     if localURL.pathExtension.lowercased() != "epub" { cacheDocument(document, for: id) }

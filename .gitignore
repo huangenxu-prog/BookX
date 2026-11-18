@@ -22,3 +22,6 @@ Models/
 Generated/
 speech-sample.wav
 __pycache__/
+
+SimulatorBuild/
+runtime-tests.log

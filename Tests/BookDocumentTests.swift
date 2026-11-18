@@ -5,15 +5,15 @@ final class BookDocumentTests: XCTestCase {
     private func fixture(_ name: String) -> URL {
         Bundle.module.resourceURL!.appendingPathComponent("Fixtures/" + name)
     }
-    func testChineseEncodings() throws {
-        let gb = try BookDocumentLoader.load(fixture("gb18030.txt"))
+    func testChineseEncodings() async throws {
+        let gb = try await BookDocumentLoader.load(fixture("gb18030.txt"))
         XCTAssertTrue(gb.text.hasPrefix("第一章 春天"))
         XCTAssertTrue(gb.text.contains("不能误判"))
-        let utf16 = try BookDocumentLoader.load(fixture("utf16.txt"))
+        let utf16 = try await BookDocumentLoader.load(fixture("utf16.txt"))
         XCTAssertTrue(utf16.text.contains("带有字节顺序标记"))
     }
-    func testEPUBMetadataSpineOrderAndEscapedPaths() throws {
-        let book = try BookDocumentLoader.load(fixture("ordered.epub"))
+    func testEPUBMetadataSpineOrderAndEscapedPaths() async throws {
+        let book = try await BookDocumentLoader.load(fixture("ordered.epub"))
         XCTAssertEqual(book.title, "测试书")
         XCTAssertEqual(book.author, "测试作者")
         XCTAssertTrue(book.text.contains("春天 & 花朵"))
@@ -26,17 +26,17 @@ final class BookDocumentTests: XCTestCase {
         let chapterStart = book.text.index(book.text.startIndex, offsetBy: book.chapters[1].offset)
         XCTAssertTrue(book.text[chapterStart...].hasPrefix("第二章"))
     }
-    func testEPUBTypographyDoesNotRequireExternalDTD() throws {
-        let book = try BookDocumentLoader.load(fixture("typography.epub"))
+    func testEPUBTypographyDoesNotRequireExternalDTD() async throws {
+        let book = try await BookDocumentLoader.load(fixture("typography.epub"))
         XCTAssertTrue(book.text.contains("“春天”"))
         XCTAssertTrue(book.text.contains("—"))
         XCTAssertFalse(book.text.contains("\u{00a0}"))
         XCTAssertTrue(book.text.contains(" "))
     }
-    func testBrokenEPUBFailsInsteadOfImportingEmptyBook() {
-        XCTAssertThrowsError(try BookDocumentLoader.load(fixture("broken.epub")))
+    func testBrokenEPUBFailsInsteadOfImportingEmptyBook() async throws {
+        do { _ = try await BookDocumentLoader.load(fixture("broken.epub")); XCTFail("Expected an error") } catch { }
     }
-    func testPaginationPreservesAllCharactersAndResumeAfterFontChange() {
+    func testPaginationPreservesAllCharactersAndResumeAfterFontChange() async throws {
         let text = String(repeating: "春天到了。👨‍👩‍👧‍👦花开了！\n", count: 900)
         let small = BookPagination.pages(text, fontSize: 14)
         let large = BookPagination.pages(text, fontSize: 30)
@@ -54,7 +54,7 @@ final class BookDocumentTests: XCTestCase {
 import CoreText
 
 extension BookDocumentTests {
-    func testScreenPaginationFitsWithoutDroppingText() throws {
+    func testScreenPaginationFitsWithoutDroppingText() async throws {
         let text = String(repeating: "春天来了。👨‍👩‍👧‍👦一起读书！\n\nA long English sentence to wrap across lines.\n", count: 100)
         for size in [CGSize(width: 320, height: 480), CGSize(width: 393, height: 650)] {
             for font in [19.0, 30.0] {
@@ -76,19 +76,22 @@ extension BookDocumentTests {
 #endif
 
 extension BookDocumentTests {
-    func testParsedBookCacheSurvivesReopenAndRejectsStaleOrBrokenData() throws {
+    func testParsedBookCacheSurvivesReopenAndRejectsStaleOrBrokenData() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let cache = root.appendingPathComponent("cache")
         let book = root.appendingPathComponent("book.txt")
         try "第一章 缓存正文".write(to: book, atomically: true, encoding: .utf8)
-        let first = try BookDocumentStore.load(book, directory: cache)
+        let first = try await BookDocumentStore.load(book, directory: cache)
         XCTAssertTrue(FileManager.default.fileExists(atPath: cache.appendingPathComponent("book.txt.parsed").path))
-        XCTAssertEqual(try BookDocumentStore.load(book, directory: cache).text, first.text)
+        let actual1 = try await BookDocumentStore.load(book, directory: cache).text
+        XCTAssertEqual(actual1, first.text)
         try "第二章 修改后必须读取新的正文".write(to: book, atomically: true, encoding: .utf8)
-        XCTAssertEqual(try BookDocumentStore.load(book, directory: cache).text, "第二章 修改后必须读取新的正文")
+        let actual2 = try await BookDocumentStore.load(book, directory: cache).text
+        XCTAssertEqual(actual2, "第二章 修改后必须读取新的正文")
         try Data("broken".utf8).write(to: cache.appendingPathComponent("book.txt.parsed"))
-        XCTAssertEqual(try BookDocumentStore.load(book, directory: cache).text, "第二章 修改后必须读取新的正文")
+        let actual3 = try await BookDocumentStore.load(book, directory: cache).text
+        XCTAssertEqual(actual3, "第二章 修改后必须读取新的正文")
     }
 }

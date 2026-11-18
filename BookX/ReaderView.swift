@@ -349,18 +349,22 @@ struct ReaderView: View {
         let existingIndex = epubIndex
         do {
             let (index, location, chapter) = try await readerWorker {
-                let index = try existingIndex ?? EPUBResourceStore.index(url)
+                let index: EPUBResourceIndex
+                if let existingIndex { index = existingIndex }
+                else { index = try await EPUBResourceStore.index(url) }
                 let location: EPUBLocation
                 if let explicit = destination ?? saved.epubLocation { location = explicit }
                 else if let offset = saved.readingOffset {
-                    location = try EPUBReadingEngine.legacyLocation(url, index: index, offset: offset)
+                    location = try await EPUBReadingEngine.legacyLocation(url, index: index, offset: offset)
                 } else {
                     location = EPUBLocation(resource: min(index.resources.count - 1,
                         Int(saved.progress * Double(index.resources.count))), offset: 0)
                 }
                 let target = max(0, min(index.resources.count - 1, location.resource))
-                let forward = try EPUBReadingEngine.readableChapter(url, index: index, startingAt: target, direction: 1, layout: layout)
-                let chapter = try forward ?? EPUBReadingEngine.readableChapter(url, index: index, startingAt: target - 1, direction: -1, layout: layout)
+                let forward = try await EPUBReadingEngine.readableChapter(url, index: index, startingAt: target, direction: 1, layout: layout)
+                let chapter: EPUBChapterPages?
+                if let forward { chapter = forward }
+                else { chapter = try await EPUBReadingEngine.readableChapter(url, index: index, startingAt: target - 1, direction: -1, layout: layout) }
                 guard let chapter else { throw BookReadError.invalid("书籍没有可阅读的文字正文。") }
                 return (index, location, chapter)
             }
@@ -411,7 +415,7 @@ struct ReaderView: View {
                     guard index.resources.indices.contains(target), !loadedResources.contains(target),
                           resolvedNeighbors[resource]?.contains(direction) != true else { continue }
                     let chapter = try await readerWorker(priority: .utility) {
-                        try EPUBReadingEngine.readableChapter(url, index: index, startingAt: target,
+                        try await EPUBReadingEngine.readableChapter(url, index: index, startingAt: target,
                                                              direction: direction, layout: layout)
                     }
                     guard !Task.isCancelled, generation == paginationGeneration else { return }

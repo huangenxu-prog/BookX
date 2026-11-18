@@ -4,10 +4,10 @@ options:
 packages:
   Readium:
     url: https://github.com/readium/swift-toolkit.git
-    from: 3.8.0
+    exactVersion: 3.8.0
   ZIPFoundation:
     url: https://github.com/readium/ZIPFoundation.git
-    from: 3.0.1
+    exactVersion: 3.0.1
 targets:
   BookX:
     type: application
@@ -40,3 +40,25 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGNING_ALLOWED: NO
+  BookXUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: UITests
+      - path: Tests/Fixtures/ordered.epub
+        buildPhase: resources
+    dependencies:
+      - target: BookX
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+schemes:
+  BookX:
+    build:
+      targets:
+        BookX: all
+    test:
+      targets:
+        - BookXUITests

@@ -1,10 +1,5 @@
 import Foundation
 import CoreFoundation
-#if canImport(ReadiumZIPFoundation)
-import ReadiumZIPFoundation
-#else
-import ZIPFoundation
-#endif
 import CryptoKit
 
 struct BookChapter: Codable, Sendable {
@@ -35,8 +30,8 @@ struct EPUBResourceIndex: Codable, Sendable {
 
 /// Reads EPUB entries in memory; archive paths are never written to disk.
 enum BookDocumentLoader {
-    static func load(_ url: URL) throws -> BookDocument {
-        if url.pathExtension.lowercased() == "epub" { return try epub(url) }
+    static func load(_ url: URL) async throws -> BookDocument {
+        if url.pathExtension.lowercased() == "epub" { return try await epub(url) }
         let data = try Data(contentsOf: url)
         guard data.count <= 50 * 1024 * 1024 else {
             throw BookReadError.invalid("文件过大，请导入小于 50 MB 的 TXT。")
@@ -71,30 +66,24 @@ enum BookDocumentLoader {
 
     /// Read only EPUB package metadata and its spine. No chapter XHTML is decompressed.
     /// This is the first stage of resource-oriented, on-demand EPUB loading.
-    static func epubIndex(_ url: URL) throws -> EPUBResourceIndex {
-        let archive = try Archive(url: url, accessMode: .read)
-        func extract(_ path: String) throws -> Data {
-            guard let entry = archive[path], entry.type == .file,
-                  entry.uncompressedSize <= 4 * 1024 * 1024 else {
-                throw BookReadError.invalid("EPUB 目录文件缺失或过大。")
-            }
-            var data = Data()
-            _ = try archive.extract(entry) { try Task.checkCancellation(); data.append($0) }
-            return data
+    static func epubIndex(_ url: URL) async throws -> EPUBResourceIndex {
+        let archive = try await EPUBArchive(url: url)
+        func extract(_ path: String) async throws -> Data {
+            try await archive.read(path, limit: 4 * 1024 * 1024)
         }
         let container = EPUBXML()
-        try container.parse(extract("META-INF/container.xml"))
+        try container.parse(await extract("META-INF/container.xml"))
         guard let package = container.packagePath else {
             throw BookReadError.invalid("EPUB 未包含有效的书籍目录。")
         }
         let opf = EPUBXML()
-        try opf.parse(extract(package))
+        try opf.parse(await extract(package))
         let base = URL(fileURLWithPath: "/" + package).deletingLastPathComponent()
         var names: [String: String] = [:]
         if let nav = opf.navigationPath ?? opf.items.values.first(where: { $0.type == "application/x-dtbncx+xml" })?.href {
             let navURL = base.appendingPathComponent(nav.removingPercentEncoding ?? nav).standardizedFileURL
             let navigator = EPUBXML()
-            if let bytes = try? extract(String(navURL.path.dropFirst())), (try? navigator.parse(bytes)) != nil {
+            if let bytes = try? await extract(String(navURL.path.dropFirst())), (try? navigator.parse(bytes)) != nil {
                 for (href, title) in navigator.navigationTitles {
                     let relative = String(href.split(separator: "#", maxSplits: 1).first ?? "")
                     let path = navURL.deletingLastPathComponent().appendingPathComponent(relative.removingPercentEncoding ?? relative).standardizedFileURL.path
@@ -123,95 +112,52 @@ enum BookDocumentLoader {
 
     /// Load a referenced illustration on demand. Never expand the whole EPUB or
     /// follow external URLs. The caller owns image decoding and display sizing.
-    static func epubImageData(_ url: URL, path: String) throws -> Data {
+    static func epubImageData(_ url: URL, path: String) async throws -> Data {
         try Task.checkCancellation()
         guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("://"),
               !path.split(separator: "/").contains("..") else {
             throw BookReadError.invalid("EPUB 图片地址无效。")
         }
-        let archive = try Archive(url: url, accessMode: .read)
-        guard let entry = archive[path], entry.type == .file else {
-            throw BookReadError.invalid("EPUB 图片不存在：\(path)")
-        }
-        guard entry.uncompressedSize <= 20 * 1024 * 1024 else {
-            throw BookReadError.invalid("EPUB 图片超过 20 MB：\(path)")
-        }
-        var data = Data()
-        _ = try archive.extract(entry) { chunk in
-            try Task.checkCancellation()
-            guard data.count + chunk.count <= 20 * 1024 * 1024 else {
-                throw BookReadError.invalid("EPUB 图片解压后过大。")
-            }
-            data.append(chunk)
-        }
-        return data
+        let archive = try await EPUBArchive(url: url)
+        return try await archive.read(path, limit: 20 * 1024 * 1024)
     }
 
     /// Preserve the ordered XHTML blocks for the rich EPUB renderer.
     /// This intentionally does not alter the legacy plain-text reading path.
-    static func epubBlocks(_ url: URL, resource: EPUBResource) throws -> [EPUBContentBlock] {
+    static func epubBlocks(_ url: URL, resource: EPUBResource) async throws -> [EPUBContentBlock] {
         try Task.checkCancellation()
-        let archive = try Archive(url: url, accessMode: .read)
-        guard let entry = archive[resource.path], entry.type == .file else {
-            throw BookReadError.invalid("EPUB 章节文件不存在：\(resource.path)")
-        }
-        guard entry.uncompressedSize <= 16 * 1024 * 1024 else {
-            throw BookReadError.invalid("EPUB 章节超过 16 MB：\(resource.path)")
-        }
-        var data = Data()
-        _ = try archive.extract(entry) { chunk in
-            try Task.checkCancellation()
-            guard data.count + chunk.count <= 16 * 1024 * 1024 else {
-                throw BookReadError.invalid("EPUB 章节解压后过大。")
-            }
-            data.append(chunk)
-        }
+        let archive = try await EPUBArchive(url: url)
+        let data = try await archive.read(resource.path, limit: 16 * 1024 * 1024)
         return try EPUBContentParser.blocks(data, chapterPath: resource.path)
     }
 
     /// Extract a single spine resource without parsing the rest of the book.
-    static func epubChapter(_ url: URL, resource: EPUBResource) throws -> String {
-        let archive = try Archive(url: url, accessMode: .read)
-        guard let entry = archive[resource.path], entry.type == .file else {
-            throw BookReadError.invalid("EPUB 章节文件不存在：\(resource.path)。")
-        }
-        guard entry.uncompressedSize <= 16 * 1024 * 1024 else {
-            throw BookReadError.invalid("EPUB 章节超过 16 MB：\(resource.path)。")
-        }
-        var data = Data()
-        _ = try archive.extract(entry) { try Task.checkCancellation(); data.append($0) }
+    static func epubChapter(_ url: URL, resource: EPUBResource) async throws -> String {
+        let archive = try await EPUBArchive(url: url)
+        let data = try await archive.read(resource.path, limit: 16 * 1024 * 1024)
         let chapter = EPUBXML()
         try chapter.parse(data, body: true)
         return normalizeReadingText(chapter.bodyText)
     }
 
-    private static func epub(_ url: URL) throws -> BookDocument {
-        let archive = try Archive(url: url, accessMode: .read)
+    private static func epub(_ url: URL) async throws -> BookDocument {
+        let archive = try await EPUBArchive(url: url)
         var totalBytes = 0
-        func read(_ path: String) throws -> Data {
-            guard let entry = archive[path], entry.type == .file else {
-                throw BookReadError.invalid("EPUB 缺少文件：\(path)")
-            }
-            guard entry.uncompressedSize <= 16 * 1024 * 1024 else {
-                throw BookReadError.invalid("EPUB 单个章节过大。")
-            }
-            var data = Data()
-            _ = try archive.extract(entry) { chunk in
-                totalBytes += chunk.count
-                guard totalBytes <= 64 * 1024 * 1024 else {
-                    throw BookReadError.invalid("EPUB 正文超过当前支持的大小。")
-                }
-                data.append(chunk)
+        func read(_ path: String) async throws -> Data {
+            let data = try await archive.read(path, limit: 16 * 1024 * 1024)
+            totalBytes += data.count
+            guard totalBytes <= 64 * 1024 * 1024 else {
+                throw BookReadError.invalid("EPUB 正文超过当前支持的大小。")
             }
             return data
         }
         let container = EPUBXML()
-        try container.parse(read("META-INF/container.xml"))
+        try container.parse(await read("META-INF/container.xml"))
         guard let package = container.packagePath else {
             throw BookReadError.invalid("EPUB 未包含有效的书籍目录。")
         }
         let opf = EPUBXML()
-        try opf.parse(read(package))
+        try opf.parse(await read(package))
         let base = URL(fileURLWithPath: "/" + package).deletingLastPathComponent()
         var sections: [String] = []
         var chapters: [BookChapter] = []
@@ -227,7 +173,7 @@ enum BookDocumentLoader {
             }
             let path = base.appendingPathComponent(href.removingPercentEncoding ?? href).standardizedFileURL.path
             let chapter = EPUBXML()
-            try chapter.parse(read(String(path.dropFirst())), body: true)
+            try chapter.parse(await read(String(path.dropFirst())), body: true)
             let text = normalizeReadingText(chapter.bodyText)
             if !text.isEmpty {
                 let heading = chapter.heading.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -423,7 +369,7 @@ enum EPUBResourceStore {
         return ((attributes[.size] as? NSNumber)?.intValue ?? 0,
                 attributes[.modificationDate] as? Date)
     }
-    static func index(_ source: URL) throws -> EPUBResourceIndex {
+    static func index(_ source: URL) async throws -> EPUBResourceIndex {
         try Task.checkCancellation()
         let (size, modified) = try signature(source)
         let target = indexURL(source)
@@ -432,7 +378,7 @@ enum EPUBResourceStore {
            cached.version == 3, cached.source == source.standardizedFileURL.path, cached.sourceSize == size, cached.modified == modified {
             return cached.index
         }
-        let result = try BookDocumentLoader.epubIndex(source)
+        let result = try await BookDocumentLoader.epubIndex(source)
         let entry = IndexEntry(version: 3, sourceSize: size, modified: modified, source: source.standardizedFileURL.path, index: result)
         if let data = try? PropertyListEncoder().encode(entry) {
             try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
@@ -447,7 +393,7 @@ enum EPUBResourceStore {
             .appendingPathComponent(key(source), isDirectory: true)
         return root.appendingPathComponent("\(position).plist")
     }
-    static func chapter(_ source: URL, index: EPUBResourceIndex, at position: Int) throws -> String {
+    static func chapter(_ source: URL, index: EPUBResourceIndex, at position: Int) async throws -> String {
         guard index.resources.indices.contains(position) else {
             throw BookReadError.invalid("章节位置超出 EPUB 阅读顺序。")
         }
@@ -458,7 +404,7 @@ enum EPUBResourceStore {
         if let data = try? Data(contentsOf: target),
            let cached = try? PropertyListDecoder().decode(ChapterEntry.self, from: data),
            cached.version == 1, cached.identity == identity { return cached.text }
-        let text = try BookDocumentLoader.epubChapter(source, resource: index.resources[position])
+        let text = try await BookDocumentLoader.epubChapter(source, resource: index.resources[position])
         try Task.checkCancellation()
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
@@ -515,7 +461,7 @@ enum BookDocumentStore {
         guard (try? body.write(to: textURL, options: .atomic)) != nil else { return }
         try? info.write(to: target, options: .atomic)
     }
-    static func load(_ url: URL, directory: URL? = nil) throws -> BookDocument {
+    static func load(_ url: URL, directory: URL? = nil) async throws -> BookDocument {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
         let modified = attributes[.modificationDate] as? Date
@@ -539,7 +485,7 @@ enum BookDocumentStore {
                 return legacy.document
             }
         }
-        let document = try BookDocumentLoader.load(url)
+        let document = try await BookDocumentLoader.load(url)
         write(document, to: target, source: source, size: size, modified: modified)
         return document
     }
