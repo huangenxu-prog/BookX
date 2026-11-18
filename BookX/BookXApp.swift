@@ -235,6 +235,45 @@ private struct BookCover: View {
     }
 }
 
+private struct BookSpine: View {
+    let title: String
+    let seed: Int
+
+    private var color: Color {
+        let palette: [Color] = [
+            Color(red: 0.19, green: 0.36, blue: 0.30),
+            Color(red: 0.49, green: 0.34, blue: 0.25),
+            Color(red: 0.67, green: 0.56, blue: 0.42),
+            Color(red: 0.35, green: 0.38, blue: 0.35),
+            Color(red: 0.56, green: 0.47, blue: 0.35)
+        ]
+        return palette[(seed & Int.max) % palette.count]
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                RoundedRectangle(cornerRadius: 4).fill(color.gradient)
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(.white.opacity(0.26), lineWidth: 1)
+                    .padding(5)
+                Text(String(title.prefix(12)))
+                    .font(.system(size: 15, weight: .semibold, design: .serif))
+                    .foregroundStyle(.white)
+                    .lineLimit(12)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 14)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .frame(height: 220)
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject private var library: BookLibrary
     @State private var tab = 0
@@ -429,37 +468,56 @@ struct RootView: View {
                 .padding(.top, 45)
         }
     }
+    @State private var pullingBook: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private func takeBook(_ book: BookItem) {
+        guard pullingBook == nil else { return }
+        if reduceMotion {
+            selected = book
+            return
+        }
+        withAnimation(.easeOut(duration: 0.22)) { pullingBook = book.id }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(260))
+            selected = book
+            pullingBook = nil
+        }
+    }
+
     @ViewBuilder private var libraryContent: some View {
         if library.books.isEmpty {
             ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入电子书"))
                 .padding(.top, 45)
         } else {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: 2), spacing: 28) {
-                ForEach(sortedBooks) { book in
-                    Button { selected = book } label: {
-                        VStack(alignment: .leading, spacing: 9) {
-                            BookCover(title: book.title, large: true)
-                                .frame(maxWidth: .infinity)
-                            HStack(spacing: 5) {
-                                Text(book.lastRead == nil ? "未读" : "\(Int(book.progress * 100))%")
-                                    .font(.caption)
-                                    .foregroundStyle(BookXStyle.muted)
-                                Spacer(minLength: 0)
-                                Image(systemName: "ellipsis")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(BookXStyle.muted)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 0)], spacing: 22) {
+                ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 5)), id: \.self) { start in
+                    HStack(alignment: .bottom, spacing: 3) {
+                        ForEach(Array(sortedBooks[start..<min(start + 5, sortedBooks.count)])) { book in
+                            Button { takeBook(book) } label: {
+                                BookSpine(title: book.title, seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) })
+                                    .offset(y: pullingBook == book.id ? -22 : 0)
+                                    .scaleEffect(pullingBook == book.id ? 1.07 : 1)
+                                    .shadow(color: .black.opacity(pullingBook == book.id ? 0.25 : 0.08),
+                                            radius: pullingBook == book.id ? 12 : 3, y: 4)
+                                    .zIndex(pullingBook == book.id ? 1 : 0)
                             }
-                            Text(book.title)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(BookXStyle.ink)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(book.title)
+                            .accessibilityIdentifier("library-book-" + book.title)
+                            .contextMenu {
+                                Button("删除书籍", role: .destructive) { pendingDeletion = book }
+                            }
                         }
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("library-book-" + book.title)
-                    .contextMenu {
-                        Button("删除书籍", role: .destructive) { pendingDeletion = book }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 8)
+                    .overlay(alignment: .bottom) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(red: 0.58, green: 0.43, blue: 0.31))
+                            .frame(height: 8)
+                            .shadow(color: .black.opacity(0.16), radius: 5, y: 5)
                     }
                 }
             }
