@@ -88,7 +88,7 @@ final class ReadiumCompatibilityTests: XCTestCase {
 
         // The production reader must still instantiate UIKit's pageCurl.
         let page = ReadingPage(offset: 0, text: "保留仿真翻页")
-        let curl = CurlPageView(pages: [page], currentPage: .constant(0),
+        let curl = CurlPageView(pages: [page], bookURL: nil, currentPage: .constant(0),
             fontSize: 19, lineSpacing: 8, ink: .black, background: .white,
             header: AnyView(EmptyView()), topInset: 0, bottomInset: 0,
             contentID: UUID(), positionLabels: ["1 / 1"])
@@ -109,6 +109,6 @@ final class ReadiumCompatibilityTests: XCTestCase {
             return nil
         }
         let controller = try XCTUnwrap(findCurl(host), "SwiftUI may nest the page controller under hosting containers")
-        XCTAssertEqual(controller.transitionStyle, .pageCurl)
+        XCTAssertEqual(controller.transitionStyle, UIPageViewController.TransitionStyle.pageCurl)
     }
 }
