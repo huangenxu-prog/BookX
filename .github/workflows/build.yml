@@ -29,18 +29,19 @@ jobs:
         run: |
           sips -z 1024 1024 BookX/Assets.xcassets/AppIcon.appiconset/IMG_2626.png --out BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
           sips -g pixelWidth -g pixelHeight BookX/Assets.xcassets/AppIcon.appiconset/AppIcon.png
-      - name: Install uploaded BookX texture assets
+      - name: Install uploaded book spine assets
         run: |
           set -euo pipefail
-          archive="BookX/Assets.xcassets/AppIcon.appiconset/BookXTextureAssets.zip"
-          test -f "$archive"
-          unzip -oq "$archive" -d .
-          for asset in LeatherGreen LeatherBrown LeatherCharcoal LinenIvory WalnutShelf OrnamentWaves OrnamentMountains OrnamentFloral; do
-            test -s "BookX/Assets.xcassets/${asset}.imageset/${asset}.png"
-            test -s "BookX/Assets.xcassets/${asset}.imageset/Contents.json"
+          archive="BookX/BookX10Spines.zip"
+          test -s "$archive"
+          unzip -oq "$archive" -d BookX/Assets.xcassets/
+          for n in $(seq -w 1 10); do
+            test -s "BookX/Assets.xcassets/BookSpine${n}.imageset/BookSpine${n}.png"
+            test -s "BookX/Assets.xcassets/BookSpine${n}.imageset/Contents.json"
           done
-          rm "$archive"
-          echo "Installed 8 uploaded texture asset sets."
+          test -s "BookX/Assets.xcassets/BookShelfWood.imageset/BookShelfWood.png"
+          test -s "BookX/Assets.xcassets/BookShelfWood.imageset/Contents.json"
+          echo "Installed 10 book spine assets and wooden shelf."
       - name: Generate project
         run: xcodegen generate
       - name: Compile simulator app
