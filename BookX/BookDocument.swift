@@ -117,6 +117,32 @@ enum BookDocumentLoader {
                                  resources: resources)
     }
 
+    /// Load a referenced illustration on demand. Never expand the whole EPUB or
+    /// follow external URLs. The caller owns image decoding and display sizing.
+    static func epubImageData(_ url: URL, path: String) throws -> Data {
+        try Task.checkCancellation()
+        guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("://"),
+              !path.split(separator: "/").contains("..") else {
+            throw BookReadError.invalid("EPUB 图片地址无效。")
+        }
+        let archive = try Archive(url: url, accessMode: .read)
+        guard let entry = archive[path], entry.type == .file else {
+            throw BookReadError.invalid("EPUB 图片不存在：\(path)")
+        }
+        guard entry.uncompressedSize <= 20 * 1024 * 1024 else {
+            throw BookReadError.invalid("EPUB 图片超过 20 MB：\(path)")
+        }
+        var data = Data()
+        _ = try archive.extract(entry) { chunk in
+            try Task.checkCancellation()
+            guard data.count + chunk.count <= 20 * 1024 * 1024 else {
+                throw BookReadError.invalid("EPUB 图片解压后过大。")
+            }
+            data.append(chunk)
+        }
+        return data
+    }
+
     /// Extract a single spine resource without parsing the rest of the book.
     static func epubChapter(_ url: URL, resource: EPUBResource) throws -> String {
         let archive = try Archive(url: url, accessMode: .read)
