@@ -240,7 +240,7 @@ private struct BookSpine: View {
     let seed: Int
     let styleIndex: Int
 
-    private var index: Int { styleIndex % 8 }
+    private var index: Int { styleIndex % 9 }
     private var isLight: Bool { [0, 2, 6].contains(index) }
     private var base: Color {
         let colors: [Color] = [
@@ -259,7 +259,7 @@ private struct BookSpine: View {
         switch index {
         case 0, 2, 6: return "LinenIvory"
         case 5: return "LeatherBrown"
-        case 7: return "LeatherCharcoal"
+        case 7, 8: return "LeatherCharcoal"
         default: return "LeatherGreen"
         }
     }
@@ -772,7 +772,7 @@ struct RootView: View {
                                     Button { takeBook(book) } label: {
                                         BookSpine(title: book.title,
                                                   seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) },
-                                                  styleIndex: (start + offset) % 8)
+                                                  styleIndex: (start + offset) % 9)
                                             .frame(width: spineWidth, height: 230)
                                             .clipped()
                                             .offset(y: pullingBook == book.id ? -22 : 0)
