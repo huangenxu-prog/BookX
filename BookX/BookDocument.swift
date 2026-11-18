@@ -1,6 +1,11 @@
 import Foundation
 import CoreFoundation
 import CryptoKit
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct BookChapter: Codable, Sendable {
     let title: String
@@ -33,6 +38,19 @@ enum BookDocumentLoader {
     static func load(_ url: URL) async throws -> BookDocument {
         if url.pathExtension.lowercased() == "epub" { return try await epub(url) }
         let data = try Data(contentsOf: url)
+        let ext = url.pathExtension.lowercased()
+        if ext == "rtf" {
+            guard data.count <= 20 * 1024 * 1024 else {
+                throw BookReadError.invalid("RTF 文件超过 20 MB。")
+            }
+            let attributed = try NSAttributedString(data: data, options: [
+                .documentType: NSAttributedString.DocumentType.rtf
+            ], documentAttributes: nil)
+            guard !attributed.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw BookReadError.invalid("RTF 正文为空。")
+            }
+            return BookDocument(text: attributed.string)
+        }
         guard data.count <= 50 * 1024 * 1024 else {
             throw BookReadError.invalid("文件过大，请导入小于 50 MB 的 TXT。")
         }
