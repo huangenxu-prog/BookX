@@ -78,15 +78,21 @@ enum EPUBContentParser {
                   !source.contains("://"), !source.lowercased().hasPrefix("data:") else { return nil }
             let relative = String(source.split(separator: "#", maxSplits: 1).first ?? "")
             let decoded = relative.removingPercentEncoding ?? relative
-            let base = URL(fileURLWithPath: "/" + chapterPath).deletingLastPathComponent()
-            let resolved = base.appendingPathComponent(decoded).standardizedFileURL.path
-            // Reject traversal outside the EPUB root, including normalized ../ paths.
-            // A simple check for /../ after standardization is insufficient because
-            // standardization removes those segments before this check runs.
-            let normalizedRoot = URL(fileURLWithPath: "/").standardizedFileURL.path
-            guard resolved.hasPrefix(normalizedRoot),
-                  !decoded.split(separator: "/").contains("..") else { return nil }
-            return String(resolved.dropFirst())
+            // Relative parent segments are valid inside an EPUB (e.g. Text/one.xhtml
+            // referencing ../Images/one.png). Reject only paths that actually
+            // escape the archive root, before URL standardization hides the traversal.
+            var segments = chapterPath.split(separator: "/").dropLast().map(String.init)
+            for part in decoded.split(separator: "/") {
+                if part == "." { continue }
+                if part == ".." {
+                    guard !segments.isEmpty else { return nil }
+                    segments.removeLast()
+                } else {
+                    segments.append(String(part))
+                }
+            }
+            guard !segments.isEmpty else { return nil }
+            return segments.joined(separator: "/")
         }
     }
 }
