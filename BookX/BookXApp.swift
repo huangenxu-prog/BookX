@@ -363,8 +363,8 @@ private struct BookOpeningOverlay: View {
     let title: String
     let stage: Int
 
-    private let bookWidth: CGFloat = 182
-    private let bookHeight: CGFloat = 267
+    private let bookWidth: CGFloat = 228
+    private let bookHeight: CGFloat = 334
     private let paper = Color(red: 0.96, green: 0.92, blue: 0.83)
     private let cloth = Color(red: 0.25, green: 0.39, blue: 0.32)
 
@@ -673,12 +673,12 @@ struct RootView: View {
         animatedBook = book
         bookOpeningStage = 0
         Task { @MainActor in
-            withAnimation(.easeOut(duration: 0.20)) { bookOpeningStage = 1 }
-            try? await Task.sleep(for: .milliseconds(210))
-            withAnimation(.easeInOut(duration: 0.28)) { bookOpeningStage = 2 }
-            try? await Task.sleep(for: .milliseconds(290))
-            withAnimation(.easeInOut(duration: 0.25)) { bookOpeningStage = 3 }
-            try? await Task.sleep(for: .milliseconds(260))
+            withAnimation(.easeOut(duration: 0.30)) { bookOpeningStage = 1 }
+            try? await Task.sleep(for: .milliseconds(320))
+            withAnimation(.easeInOut(duration: 0.42)) { bookOpeningStage = 2 }
+            try? await Task.sleep(for: .milliseconds(440))
+            withAnimation(.easeInOut(duration: 0.58)) { bookOpeningStage = 3 }
+            try? await Task.sleep(for: .milliseconds(610))
             selected = book
             animatedBook = nil
             pullingBook = nil
