@@ -217,12 +217,13 @@ private struct BookCover: View {
                     .padding(4)
                     .background(BookXStyle.paper.opacity(0.95), in: RoundedRectangle(cornerRadius: 2))
                 Spacer()
-                Text(title)
-                    .font(.system(size: large ? 21 : 13, weight: .semibold, design: .serif))
+                Text(title.count > (large ? 14 : 10) ? String(title.prefix(large ? 13 : 9)) + "…" : title)
+                    .font(.system(size: large ? 17 : 11, weight: .semibold, design: .serif))
                     .foregroundStyle(.white.opacity(0.95))
-                    .lineLimit(5)
-                    .minimumScaleFactor(0.65)
-                    .frame(maxWidth: large ? 42 : 30)
+                    .lineLimit(large ? 4 : 3)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, large ? 15 : 10)
             .padding(.top, large ? 19 : 12)
@@ -411,12 +412,12 @@ struct RootView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(BookXStyle.purple)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 15).padding(.vertical, 7)
+                    .padding(.horizontal, 15).padding(.vertical, 5)
                     .background(BookXStyle.lilac.opacity(0.55), in: Capsule())
                 ForEach(sortedBooks.filter { initial($0.title) == letter }) { book in
                     Button { selected = book } label: {
-                        HStack(spacing: 16) {
-                            BookCover(title: book.title, large: false).frame(width: 65)
+                        HStack(spacing: 14) {
+                            BookCover(title: book.title, large: false).frame(width: 60)
                             VStack(alignment: .leading, spacing: 7) {
                                 Text(book.title)
                                     .font(.system(size: 18, weight: .bold))
@@ -431,7 +432,7 @@ struct RootView: View {
                             Image(systemName: "chevron.right").foregroundStyle(BookXStyle.purple)
                                 .frame(width: 20)
                         }
-                        .padding(14)
+                        .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(BookXStyle.panel, in: RoundedRectangle(cornerRadius: 18))
                         .shadow(color: BookXStyle.purple.opacity(0.08), radius: 12, y: 5)
