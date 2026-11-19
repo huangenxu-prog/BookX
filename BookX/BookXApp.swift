@@ -707,18 +707,19 @@ struct RootView: View {
             ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入电子书"))
                 .padding(.top, 45)
         } else {
-            // Design reference: five upright, non-overlapping spines on the first shelf;
-            // four on the second. Explicit widths prevent intrinsic image sizing from
-            // turning a book spine into a full cover or pushing books off screen.
+            // Dense real-bookshelf layout: nine original-proportion spines per row.
+            // Keep each spine at its original minimum 33pt width; never compress
+            // artwork to fill the shelf. At 9 x 33 + 8 x 2 = 313pt, the row
+            // fits the usable width of iPhone 16 without horizontal scrolling.
             GeometryReader { geometry in
                 let availableWidth = max(0, geometry.size.width)
-                let spineWidth = min(43, max(33, (availableWidth - 108) / 5))
-                let gap = max(13, (availableWidth - spineWidth * 5) / 6)
+                let spineWidth: CGFloat = 33
+                let gap: CGFloat = 2
                 VStack(spacing: 24) {
-                    ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 5)), id: \.self) { start in
+                    ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 9)), id: \.self) { start in
                         VStack(spacing: 0) {
                             HStack(alignment: .bottom, spacing: gap) {
-                                ForEach(Array(sortedBooks[start..<min(start + 5, sortedBooks.count)].enumerated()), id: \.element.id) { offset, book in
+                                ForEach(Array(sortedBooks[start..<min(start + 9, sortedBooks.count)].enumerated()), id: \.element.id) { offset, book in
                                     Button { takeBook(book) } label: {
                                         BookSpine(title: book.title,
                                                   seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) },
