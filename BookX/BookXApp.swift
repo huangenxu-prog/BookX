@@ -701,7 +701,7 @@ struct RootView: View {
             try? await Task.sleep(for: .milliseconds(440))
             withAnimation(.easeInOut(duration: 0.58)) { bookOpeningStage = 3 }
             try? await Task.sleep(for: .milliseconds(610))
-            library.updateProgress(book.id, book.progress, offset: book.readingOffset, epubLocation: book.epubLocation)
+            library.updateProgress(book.id, book.progress, offset: book.readingOffset ?? 0, epubLocation: book.epubLocation)
             selected = book
             animatedBook = nil
             pullingBook = nil
