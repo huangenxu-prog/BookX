@@ -597,11 +597,7 @@ struct RootView: View {
                 ReaderOpeningTransition(book: book)
                     .environmentObject(library)
             }
-            .transaction { transaction in
-                // Suppress the system's bottom-up modal animation. The book
-                // opening and paper expansion provide the visible transition.
-                transaction.disablesAnimations = true
-            }
+
     }
     private var header: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -705,6 +701,7 @@ struct RootView: View {
             try? await Task.sleep(for: .milliseconds(440))
             withAnimation(.easeInOut(duration: 0.58)) { bookOpeningStage = 3 }
             try? await Task.sleep(for: .milliseconds(610))
+            library.updateProgress(book.id, book.progress, offset: book.readingOffset, epubLocation: book.epubLocation)
             selected = book
             animatedBook = nil
             pullingBook = nil
