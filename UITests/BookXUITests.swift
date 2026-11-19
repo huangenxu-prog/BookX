@@ -63,7 +63,9 @@ final class BookXUITests: XCTestCase {
         XCTAssertFalse(saved.hasPrefix("1 /"))
         app.buttons["返回"].tap()
         app.buttons["tab-shelf"].tap()
-        app.buttons["continue-reading"].tap()
+        let resume = app.buttons["continue-reading"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 15), "Continue-reading button should appear after returning to shelf")
+        resume.tap()
         XCTAssertTrue(position.waitForExistence(timeout: 15))
         XCTAssertEqual(position.label, saved)
     }
