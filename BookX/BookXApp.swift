@@ -443,32 +443,37 @@ private struct ReaderOpeningTransition: View {
     let book: BookItem
     @EnvironmentObject private var library: BookLibrary
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showingOpening = true
+    @State private var revealReader = false
 
     var body: some View {
-        ZStack {
-            ReaderView(book: book)
-                .environmentObject(library)
-            if showingOpening && !reduceMotion {
-                BookOpeningOverlay(title: book.title, stage: 3)
-                    .opacity(showingOpening ? 1 : 0)
-                    .transition(.opacity)
-                    .zIndex(1)
-                    .accessibilityHidden(true)
+        GeometryReader { geometry in
+            ZStack {
+                ReaderView(book: book)
+                    .environmentObject(library)
+                    .opacity(revealReader || reduceMotion ? 1 : 0)
+
+                if !reduceMotion {
+                    // Continue from the exact open-book frame on the shelf.
+                    // Expand its paper into the reader instead of letting the
+                    // default fullScreenCover slide up as a second animation.
+                    BookOpeningOverlay(title: book.title, stage: 3)
+                        .scaleEffect(revealReader ? max(
+                            geometry.size.width / 228,
+                            geometry.size.height / 334
+                        ) * 1.12 : 1)
+                        .opacity(revealReader ? 0 : 1)
+                        .allowsHitTesting(!revealReader)
+                        .accessibilityHidden(true)
+                }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .background(Color(red: 0.96, green: 0.92, blue: 0.83))
+            .ignoresSafeArea()
         }
         .onAppear {
-            guard !reduceMotion else {
-                showingOpening = false
-                return
-            }
-            // Keep the final opening frame above the reader while the full-screen
-            // presentation settles; then dissolve instead of abruptly removing it.
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(220))
-                withAnimation(.easeOut(duration: 0.42)) {
-                    showingOpening = false
-                }
+            guard !reduceMotion else { revealReader = true; return }
+            withAnimation(.easeInOut(duration: 0.55)) {
+                revealReader = true
             }
         }
     }
@@ -591,6 +596,11 @@ struct RootView: View {
             .fullScreenCover(item: $selected) { book in
                 ReaderOpeningTransition(book: book)
                     .environmentObject(library)
+            }
+            .transaction { transaction in
+                // Suppress the system's bottom-up modal animation. The book
+                // opening and paper expansion provide the visible transition.
+                transaction.disablesAnimations = true
             }
     }
     private var header: some View {
@@ -761,7 +771,7 @@ struct RootView: View {
                 }
                 .frame(width: availableWidth, alignment: .center)
             }
-            .frame(height: CGFloat((sortedBooks.count + 4) / 5) * 240 + CGFloat(max(0, (sortedBooks.count + 4) / 5 - 1)) * 24)
+            .frame(height: CGFloat((sortedBooks.count + 8) / 9) * 240 + CGFloat(max(0, (sortedBooks.count + 8) / 9 - 1)) * 24)
         }
     }
     private func sectionTitle(_ title: String) -> some View {
