@@ -739,7 +739,7 @@ struct RootView: View {
                                     }
                                 }
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(LinearGradient(colors: [
                                     Color(red: 0.78, green: 0.53, blue: 0.32),
