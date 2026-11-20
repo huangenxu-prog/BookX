@@ -465,11 +465,11 @@ private struct SpineOrnament: Shape {
 private struct BookOpeningOverlay: View {
     let title: String
     let stage: Int
+    var showBackdrop: Bool = true
 
     private let bookWidth: CGFloat = 228
     private let bookHeight: CGFloat = 334
     private let paper = Color(red: 0.96, green: 0.92, blue: 0.83)
-    private let cloth = Color(red: 0.25, green: 0.39, blue: 0.32)
 
     private var insidePage: some View {
         RoundedRectangle(cornerRadius: 5)
@@ -501,43 +501,14 @@ private struct BookOpeningOverlay: View {
     }
 
     private var frontCover: some View {
-        RoundedRectangle(cornerRadius: 5)
-            .fill(
-                LinearGradient(colors: [
-                    cloth.opacity(0.65), cloth, cloth.opacity(0.91)
-                ], startPoint: .leading, endPoint: .trailing)
-            )
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(.black.opacity(0.18))
-                    .frame(width: 8)
-                    .blur(radius: 3)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(Color(red: 0.77, green: 0.67, blue: 0.45).opacity(0.75), lineWidth: 1)
-                    .padding(11)
-            }
-            .overlay {
-                VStack(spacing: 18) {
-                    Image(systemName: "books.vertical")
-                        .font(.system(size: 22, weight: .ultraLight))
-                    Text(title)
-                        .font(.system(size: 21, weight: .semibold, design: .serif))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(4)
-                        .padding(.horizontal, 18)
-                    Image(systemName: "leaf")
-                        .font(.system(size: 16, weight: .ultraLight))
-                }
-                .foregroundStyle(Color(red: 0.95, green: 0.86, blue: 0.68))
-            }
+        // Reuse the exact bookshelf cover so color, title and ornament match.
+        BookCover(title: title, large: true)
             .frame(width: bookWidth, height: bookHeight)
     }
 
     var body: some View {
         ZStack {
-            Color.black.opacity(stage == 0 ? 0.06 : 0.24).ignoresSafeArea()
+            Color.black.opacity(showBackdrop ? (stage == 0 ? 0.06 : 0.24) : 0).ignoresSafeArea()
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(Color(red: 0.78, green: 0.72, blue: 0.62))
@@ -581,7 +552,7 @@ private struct ReaderOpeningTransition: View {
                     // Continue from the exact open-book frame on the shelf.
                     // Expand its paper into the reader instead of letting the
                     // default fullScreenCover slide up as a second animation.
-                    BookOpeningOverlay(title: book.title, stage: 3)
+                    BookOpeningOverlay(title: book.title, stage: 3, showBackdrop: false)
                         .scaleEffect(revealReader ? max(
                             geometry.size.width / 228,
                             geometry.size.height / 334
