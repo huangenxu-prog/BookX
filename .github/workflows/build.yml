@@ -58,6 +58,16 @@ jobs:
                   dest = base / f"BookCover{n:02d}.imageset"
                   dest.mkdir(parents=True, exist_ok=True)
                   (dest / name).write_bytes(z.read(name))
+                  # Crop the photographed book itself; the 600x800 source
+                  # includes large beige margins that must not be rendered.
+                  import subprocess
+                  top = {5: 229, 6: 229, 7: 229}.get(n, 202 if n in (9, 10, 11, 12) else 208)
+                  left = 161 if n in (4, 8, 12) else 155
+                  subprocess.run([
+                      "sips", "-c", "380", "276",
+                      "--cropOffset", str(top), str(left),
+                      str(dest / name), "--out", str(dest / name)
+                  ], check=True, stdout=subprocess.DEVNULL)
                   contents = {"images": [{"filename": name, "idiom": "universal"}],
                               "info": {"author": "xcode", "version": 1}}
                   (dest / "Contents.json").write_text(json.dumps(contents))
