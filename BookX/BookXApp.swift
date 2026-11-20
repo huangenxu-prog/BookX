@@ -248,12 +248,23 @@ private struct BookCover: View {
     // Each artwork owns its typography. Never derive contrast from book title.
     private var coverNumber: Int { Int(artworkName.suffix(2)) ?? 1 }
     private var artworkTitleColor: Color {
-        // Minimalist covers have varying pale and dark backgrounds.
-        // Keep typography quiet and contrast-aware by cover design.
-        switch coverNumber {
-        case 2, 4, 7, 9, 10, 12: return Color(red: 0.16, green: 0.19, blue: 0.20)
-        default: return Color(red: 0.94, green: 0.91, blue: 0.82)
-        }
+        // One fixed ink color per cover asset. Never use the book title to
+        // determine the ink: every reuse of the same artwork must match.
+        let inks: [Color] = [
+            Color(red: 0.19, green: 0.24, blue: 0.20), // 01 sage
+            Color(red: 0.18, green: 0.20, blue: 0.20), // 02
+            Color(red: 0.96, green: 0.94, blue: 0.88), // 03 dark blue
+            Color(red: 0.21, green: 0.22, blue: 0.20), // 04
+            Color(red: 0.18, green: 0.21, blue: 0.20), // 05
+            Color(red: 0.96, green: 0.94, blue: 0.89), // 06 dark
+            Color(red: 0.19, green: 0.21, blue: 0.20), // 07
+            Color(red: 0.97, green: 0.94, blue: 0.87), // 08 dark
+            Color(red: 0.19, green: 0.21, blue: 0.21), // 09
+            Color(red: 0.20, green: 0.21, blue: 0.20), // 10
+            Color(red: 0.96, green: 0.94, blue: 0.87), // 11 dark
+            Color(red: 0.20, green: 0.22, blue: 0.20)  // 12
+        ]
+        return inks[max(0, min(11, coverNumber - 1))]
     }
     private var artworkTitlePosition: CGFloat { 0.14 }
     private var shortTitle: String {
