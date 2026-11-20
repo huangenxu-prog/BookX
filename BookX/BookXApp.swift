@@ -189,7 +189,6 @@ private struct BookCover: View {
     let title: String
     let large: Bool
 
-    // Stable, restrained cloth-bound palettes; never change on relaunch.
     private var style: Int {
         let name = title.components(separatedBy: ["（", "(", "【", "["]).first ?? title
         if name.contains("明朝") { return 0 }
@@ -199,66 +198,164 @@ private struct BookCover: View {
         if name.contains("牧神") { return 4 }
         if name.contains("道氏") { return 5 }
         return Int(name.unicodeScalars.reduce(UInt64(1469598103934665603)) {
-            ($0 ^ UInt64($1.value)) &* 1099511628211
+            ($0 ^ UInt64($1.value)) &* UInt64(1099511628211)
         } % 6)
     }
+
     private var cloth: Color {
         [
             Color(red: 0.13, green: 0.32, blue: 0.26),
-            Color(red: 0.83, green: 0.76, blue: 0.63),
+            Color(red: 0.88, green: 0.82, blue: 0.71),
             Color(red: 0.11, green: 0.23, blue: 0.33),
             Color(red: 0.37, green: 0.17, blue: 0.18),
             Color(red: 0.14, green: 0.25, blue: 0.33),
-            Color(red: 0.77, green: 0.72, blue: 0.61)
+            Color(red: 0.84, green: 0.80, blue: 0.71)
         ][style]
     }
     private var lightCover: Bool { style == 1 || style == 5 }
-    private var gold: Color { Color(red: 0.83, green: 0.70, blue: 0.46) }
+    private var gold: Color { Color(red: 0.82, green: 0.68, blue: 0.44) }
     private var ink: Color {
-        lightCover ? Color(red: 0.27, green: 0.22, blue: 0.16) : Color(red: 0.96, green: 0.86, blue: 0.66)
+        lightCover ? Color(red: 0.25, green: 0.21, blue: 0.17) :
+            Color(red: 0.96, green: 0.86, blue: 0.67)
     }
     private var shortTitle: String {
-        title.components(separatedBy: ["（", "(", "【", "["]).first?
+        let cleaned = title.components(separatedBy: ["（", "(", "【", "["]).first?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? title
+        return cleaned.replacingOccurrences(of: "《", with: "")
+            .replacingOccurrences(of: "》", with: "")
     }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(LinearGradient(colors: [
-                    cloth.opacity(0.83), cloth, cloth.opacity(0.91)
-                ], startPoint: .topLeading, endPoint: .bottomTrailing))
-            // Debossed double border and a subtle stitched spine.
-            RoundedRectangle(cornerRadius: 3)
-                .strokeBorder(gold.opacity(lightCover ? 0.46 : 0.75), lineWidth: 0.8)
-                .padding(.leading, 12).padding(.trailing, 7).padding(.vertical, 8)
-            HStack(spacing: 0) {
-                Rectangle().fill(.black.opacity(0.18)).frame(width: 5)
-                Rectangle().fill(.white.opacity(0.13)).frame(width: 2)
-                Spacer(minLength: 0)
+        GeometryReader { geometry in
+            let w = geometry.size.width
+            let h = geometry.size.height
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(LinearGradient(colors: [
+                        cloth.opacity(0.85), cloth, cloth.opacity(0.94)
+                    ], startPoint: .topLeading, endPoint: .bottomTrailing))
+
+                // Deterministic fine cloth grain; no external assets or network.
+                Canvas { context, size in
+                    for i in 0..<180 {
+                        let x = CGFloat((i * 47 + 13) % 191) / 191 * size.width
+                        let y = CGFloat((i * 83 + 29) % 223) / 223 * size.height
+                        let dot = CGRect(x: x, y: y, width: 0.55, height: 0.8)
+                        context.fill(Path(ellipseIn: dot), with: .color(.white.opacity(0.10)))
+                    }
+                }
+                .allowsHitTesting(false)
+
+                // The illustration is drawn in vectors and scales with the cover.
+                BookCoverArtwork(variant: style, color: lightCover ?
+                    Color(red: 0.40, green: 0.36, blue: 0.28) : gold)
+                    .frame(width: w * 0.91, height: h * 0.46)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .opacity(lightCover ? 0.60 : 0.80)
+                    .clipped()
+
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(gold.opacity(lightCover ? 0.38 : 0.73), lineWidth: 0.75)
+                    .padding(.leading, 12).padding(.trailing, 7).padding(.vertical, 8)
+
+                HStack(spacing: 0) {
+                    Rectangle().fill(.black.opacity(0.19)).frame(width: 5)
+                    Rectangle().fill(.white.opacity(0.14)).frame(width: 2)
+                    Spacer(minLength: 0)
+                }
+
+                VStack(spacing: 7) {
+                    Spacer().frame(height: h * 0.15)
+                    Text(shortTitle)
+                        .font(.system(size: large ? 19 : 11, weight: .semibold, design: .serif))
+                        .foregroundStyle(ink)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(large ? 4 : 3)
+                        .minimumScaleFactor(0.68)
+                        .frame(maxWidth: w * 0.78)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-            VStack(spacing: large ? 13 : 7) {
-                Spacer(minLength: large ? 19 : 10)
-                Text(shortTitle)
-                    .font(.system(size: large ? 19 : 11, weight: .semibold, design: .serif))
-                    .foregroundStyle(ink)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(large ? 4 : 3)
-                    .minimumScaleFactor(0.72)
-                    .padding(.horizontal, large ? 16 : 9)
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(gold.opacity(0.8))
-                    .frame(width: large ? 24 : 12, height: 1)
-                Spacer(minLength: 0)
-                Image(systemName: ["building.columns", "mountain.2", "leaf", "camera.macro", "sparkle", "mountain.2"][style])
-                    .font(.system(size: large ? 37 : 18, weight: .ultraLight))
-                    .foregroundStyle(gold.opacity(lightCover ? 0.60 : 0.75))
-                    .padding(.bottom, large ? 24 : 13)
-            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .aspectRatio(0.69, contentMode: .fit)
         .shadow(color: .black.opacity(0.17), radius: 9, x: 2, y: 8)
-        .accessibilityLabel("封面：\\(title)")
+        .accessibilityLabel("封面：\(title)")
+    }
+}
+
+// Small, scalable ink-and-gold book illustrations, not SF Symbol placeholders.
+private struct BookCoverArtwork: View {
+    let variant: Int
+    let color: Color
+
+    var body: some View {
+        Canvas { context, size in
+            let w = size.width
+            let h = size.height
+            var lines = Path()
+            switch variant {
+            case 0, 1, 4, 5:
+                // Layered landscape, reminiscent of traditional engraved endpapers.
+                for layer in 0..<3 {
+                    let shift = CGFloat(layer) * 0.12
+                    lines.move(to: CGPoint(x: 0, y: h * (0.75 + shift)))
+                    lines.addLine(to: CGPoint(x: w * 0.20, y: h * (0.44 + shift)))
+                    lines.addLine(to: CGPoint(x: w * 0.37, y: h * (0.65 + shift)))
+                    lines.addLine(to: CGPoint(x: w * 0.61, y: h * (0.30 + shift)))
+                    lines.addLine(to: CGPoint(x: w * 0.83, y: h * (0.62 + shift)))
+                    lines.addLine(to: CGPoint(x: w, y: h * (0.48 + shift)))
+                }
+                if variant == 0 || variant == 1 {
+                    // A compact palace roof / old city silhouette.
+                    let roof = h * 0.80
+                    lines.move(to: CGPoint(x: w * 0.22, y: roof))
+                    lines.addQuadCurve(to: CGPoint(x: w * 0.78, y: roof),
+                                       control: CGPoint(x: w * 0.50, y: h * 0.56))
+                    lines.move(to: CGPoint(x: w * 0.28, y: roof + 3))
+                    lines.addLine(to: CGPoint(x: w * 0.72, y: roof + 3))
+                    for i in 0..<5 {
+                        let x = w * (0.30 + CGFloat(i) * 0.10)
+                        lines.move(to: CGPoint(x: x, y: roof + 3))
+                        lines.addLine(to: CGPoint(x: x, y: h * 0.96))
+                    }
+                }
+            case 2:
+                // Engraved bamboo leaves.
+                lines.move(to: CGPoint(x: w * 0.22, y: h))
+                lines.addQuadCurve(to: CGPoint(x: w * 0.75, y: h * 0.10),
+                                   control: CGPoint(x: w * 0.40, y: h * 0.52))
+                for i in 0..<6 {
+                    let y = h * (0.20 + CGFloat(i) * 0.11)
+                    let x = w * (0.69 - CGFloat(i) * 0.055)
+                    lines.move(to: CGPoint(x: x, y: y))
+                    lines.addQuadCurve(to: CGPoint(x: x - w * 0.27, y: y - h * 0.12),
+                                       control: CGPoint(x: x - w * 0.20, y: y - h * 0.14))
+                    lines.move(to: CGPoint(x: x, y: y))
+                    lines.addQuadCurve(to: CGPoint(x: x + w * 0.23, y: y - h * 0.13),
+                                       control: CGPoint(x: x + w * 0.18, y: y - h * 0.14))
+                }
+            default:
+                // A flowering branch, with small hand-drawn five-petal blossoms.
+                lines.move(to: CGPoint(x: w * 0.20, y: h))
+                lines.addQuadCurve(to: CGPoint(x: w * 0.76, y: h * 0.20),
+                                   control: CGPoint(x: w * 0.43, y: h * 0.48))
+                for i in 0..<5 {
+                    let x = w * (0.32 + CGFloat(i) * 0.10)
+                    let y = h * (0.83 - CGFloat(i) * 0.13)
+                    for petal in 0..<5 {
+                        let angle = CGFloat(petal) * (.pi * 2 / 5)
+                        let px = x + cos(angle) * w * 0.035
+                        let py = y + sin(angle) * w * 0.035
+                        lines.addEllipse(in: CGRect(x: px - 2.5, y: py - 2.5,
+                                                    width: 5, height: 5))
+                    }
+                }
+            }
+            context.stroke(lines, with: .color(color), lineWidth: max(0.7, w / 135))
+        }
+        .accessibilityHidden(true)
     }
 }
 
