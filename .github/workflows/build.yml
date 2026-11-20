@@ -64,9 +64,11 @@ jobs:
                   import subprocess
                   top = {5: 229, 6: 229, 7: 229}.get(n, 202 if n in (9, 10, 11, 12) else 208)
                   left = 161 if n in (4, 8, 12) else 155
+                  # Remove remaining photographed backdrop at the top/bottom
+                  # without scaling the cover in SwiftUI. Preserve the spine.
                   subprocess.run([
-                      "sips", "-c", "380", "276",
-                      "--cropOffset", str(top), str(left),
+                      "sips", "-c", "352", "266",
+                      "--cropOffset", str(top + 14), str(left + 5),
                       str(dest / name), "--out", str(dest / name)
                   ], check=True, stdout=subprocess.DEVNULL)
                   contents = {"images": [{"filename": name, "idiom": "universal"}],
