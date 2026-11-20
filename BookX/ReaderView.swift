@@ -33,6 +33,7 @@ struct ReaderView: View {
         case 1: return Color(red: 0.97, green: 0.93, blue: 0.85)
         case 2: return Color(red: 0.86, green: 0.92, blue: 0.85)
         case 3: return Color(red: 0.13, green: 0.13, blue: 0.13)
+        case 4: return Color(red: 248.0 / 255, green: 249.0 / 255, blue: 244.0 / 255)
         default: return .white
         }
     }
