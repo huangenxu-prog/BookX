@@ -231,20 +231,14 @@ private struct BookCover: View {
     // Each artwork owns its typography. Never derive contrast from book title.
     private var coverNumber: Int { Int(artworkName.suffix(2)) ?? 1 }
     private var artworkTitleColor: Color {
-        // All photographed covers have dark upper artwork or detailed foliage;
-        // bright ivory with a dark outline is legible over both.
+        // Minimalist covers have varying pale and dark backgrounds.
+        // Keep typography quiet and contrast-aware by cover design.
         switch coverNumber {
-        case 4, 8, 12: return Color(red: 1.0, green: 0.97, blue: 0.86)
-        default: return Color(red: 1.0, green: 0.93, blue: 0.75)
+        case 2, 4, 7, 9, 11: return Color(red: 0.22, green: 0.25, blue: 0.24)
+        default: return Color(red: 0.94, green: 0.91, blue: 0.82)
         }
     }
-    private var artworkTitlePosition: CGFloat {
-        switch coverNumber {
-        case 4, 8, 12: return 0.24
-        case 3, 7, 11: return 0.18
-        default: return 0.13
-        }
-    }
+    private var artworkTitlePosition: CGFloat { 0.14 }
     private var shortTitle: String {
         let cleaned = title.components(separatedBy: ["（", "(", "【", "["]).first?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? title
@@ -280,9 +274,9 @@ private struct BookCover: View {
                 VStack(spacing: 7) {
                     Spacer().frame(height: h * artworkTitlePosition)
                     Text(shortTitle)
-                        .font(.system(size: large ? 19 : 11, weight: .semibold, design: .serif))
+                        .font(.system(size: large ? 15 : 9, weight: .medium, design: .serif))
                          .foregroundStyle(UIImage(named: artworkName) == nil ? ink : artworkTitleColor)
-                        .shadow(color: .black.opacity(0.95), radius: 1.7, x: 0, y: 1)
+                        .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
                         .multilineTextAlignment(.center)
                         .lineLimit(large ? 4 : 3)
                         .minimumScaleFactor(0.68)
@@ -292,7 +286,7 @@ private struct BookCover: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .aspectRatio(0.69, contentMode: .fit)
+        .aspectRatio(0.62, contentMode: .fit)
         .shadow(color: .black.opacity(0.17), radius: 9, x: 2, y: 8)
         .accessibilityLabel("封面：\(title)")
     }
