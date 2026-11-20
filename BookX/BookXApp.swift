@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import CoreFoundation
+import CryptoKit
 
 @main
 struct BookXApp: App {
@@ -103,11 +104,24 @@ final class BookLibrary: ObservableObject {
         UserDefaults.standard.set(paper, forKey: "paper")
         UserDefaults.standard.set(pageMode, forKey: "pageMode")
     }
+    private func fileDigest(_ url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1048576), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
     func importFiles(_ urls: [URL]) async {
         guard !importing else { return }
         importing = true
         defer { importing = false }
         var failures: [String] = []
+        var knownDigests = Set<String>()
+        for book in books {
+            if let digest = try? fileDigest(fileURL(book)) { knownDigests.insert(digest) }
+        }
         for url in urls {
             if Task.isCancelled { break }
             let accessed = url.startAccessingSecurityScopedResource()
@@ -115,6 +129,8 @@ final class BookLibrary: ObservableObject {
             guard ["txt", "epub", "md", "markdown", "rtf", "html", "htm", "fb2"].contains(url.pathExtension.lowercased()) else { continue }
             let name = UUID().uuidString + "." + url.pathExtension.lowercased()
             do {
+                let digest = try fileDigest(url)
+                if knownDigests.contains(digest) { continue }
                 try fm.copyItem(at: url, to: folder.appendingPathComponent(name))
                 let localURL = folder.appendingPathComponent(name)
                 do {
@@ -130,6 +146,7 @@ final class BookLibrary: ObservableObject {
                     books.append(BookItem(id: id,
                         title: document.title.isEmpty ? url.deletingPathExtension().lastPathComponent : document.title,
                         author: document.author, filename: name, progress: 0, lastRead: nil))
+                    knownDigests.insert(digest)
                 } catch {
                     try? fm.removeItem(at: localURL)
                     EPUBResourceStore.remove(localURL)
