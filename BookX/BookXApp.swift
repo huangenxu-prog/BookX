@@ -498,72 +498,23 @@ private struct BookOpeningOverlay: View {
     let stage: Int
     var showBackdrop: Bool = true
 
-    private let bookWidth: CGFloat = 228
-    private let bookHeight: CGFloat = 334
-    private let paper = Color(red: 0.96, green: 0.92, blue: 0.83)
-
-    private var insidePage: some View {
-        RoundedRectangle(cornerRadius: 5)
-            .fill(paper)
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(.black.opacity(0.12))
-                    .frame(width: 7)
-                    .blur(radius: 3)
-            }
-            .overlay {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(title)
-                        .font(.system(size: 16, weight: .semibold, design: .serif))
-                        .lineLimit(2)
-                        .padding(.bottom, 12)
-                    ForEach(0..<7, id: \.self) { index in
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.black.opacity(0.16))
-                            .frame(height: 2)
-                            .padding(.trailing, index.isMultiple(of: 3) ? 32 : 0)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(Color(red: 0.24, green: 0.26, blue: 0.22))
-                .padding(23)
-            }
-            .frame(width: bookWidth, height: bookHeight)
-    }
-
-    private var frontCover: some View {
-        // Reuse the exact bookshelf cover so color, title and ornament match.
-        BookCover(title: title, large: true)
-            .frame(width: bookWidth, height: bookHeight)
-    }
-
     var body: some View {
         ZStack {
-            Color.black.opacity(showBackdrop ? (stage == 0 ? 0.06 : 0.24) : 0).ignoresSafeArea()
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color(red: 0.78, green: 0.72, blue: 0.62))
-                    .frame(width: bookWidth, height: bookHeight)
-                    .offset(x: 8, y: 5)
-                insidePage
-                frontCover
-                    .rotation3DEffect(
-                        .degrees(stage == 0 ? -75 : (stage >= 3 ? -150 : 0)),
-                        axis: (x: 0, y: 1, z: 0),
-                        anchor: .leading,
-                        perspective: 0.55
-                    )
-            }
-            .frame(width: bookWidth, height: bookHeight)
-            .scaleEffect(stage == 0 ? 0.67 : (stage >= 2 ? 1.25 : 1))
-            .shadow(color: .black.opacity(0.25), radius: 18, y: 13)
+            Color.black.opacity(showBackdrop ? 0.10 : 0)
+                .ignoresSafeArea()
+            // One continuous cover movement: no artificial white inner page,
+            // no reverse-opening hinge, and no second page-turn animation.
+            BookCover(title: title, large: true)
+                .frame(width: 228, height: 334)
+                .scaleEffect(stage == 0 ? 0.76 : (stage == 1 ? 0.96 : 1.13))
+                .rotationEffect(.degrees(stage == 0 ? -4 : 0))
+                .shadow(color: .black.opacity(0.20), radius: 17, y: 11)
         }
         .allowsHitTesting(true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("正在打开《" + title + "》")
     }
 }
-
 
 private struct ReaderOpeningTransition: View {
     let book: BookItem
@@ -820,12 +771,10 @@ struct RootView: View {
         animatedBook = book
         bookOpeningStage = 0
         Task { @MainActor in
-            withAnimation(.easeOut(duration: 0.30)) { bookOpeningStage = 1 }
-            try? await Task.sleep(for: .milliseconds(320))
-            withAnimation(.easeInOut(duration: 0.42)) { bookOpeningStage = 2 }
-            try? await Task.sleep(for: .milliseconds(440))
-            withAnimation(.easeInOut(duration: 0.58)) { bookOpeningStage = 3 }
-            try? await Task.sleep(for: .milliseconds(610))
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) { bookOpeningStage = 1 }
+            try? await Task.sleep(for: .milliseconds(280))
+            withAnimation(.easeOut(duration: 0.20)) { bookOpeningStage = 2 }
+            try? await Task.sleep(for: .milliseconds(210))
             library.updateProgress(book.id, book.progress, offset: book.readingOffset ?? 0, epubLocation: book.epubLocation)
             selected = book
             animatedBook = nil
