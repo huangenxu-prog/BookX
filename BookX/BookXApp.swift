@@ -237,6 +237,20 @@ private struct BookCover: View {
         lightCover ? Color(red: 0.25, green: 0.21, blue: 0.17) :
             Color(red: 0.96, green: 0.86, blue: 0.67)
     }
+    // Cover artwork and title color are one fixed visual theme.
+    // Dark cloth uses warm ivory/gold; parchment uses dark brown.
+    private var artworkTitleColor: Color {
+        switch artworkName {
+        case "BookCover01", "BookCover02", "BookCover03",
+             "BookCover05", "BookCover07", "BookCover08", "BookCover10":
+            return Color(red: 0.97, green: 0.87, blue: 0.68)
+        case "BookCover04", "BookCover06", "BookCover09",
+             "BookCover11", "BookCover12":
+            return Color(red: 0.23, green: 0.19, blue: 0.15)
+        default:
+            return ink
+        }
+    }
     private var shortTitle: String {
         let cleaned = title.components(separatedBy: ["（", "(", "【", "["]).first?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? title
@@ -299,7 +313,7 @@ private struct BookCover: View {
                     Spacer().frame(height: h * 0.15)
                     Text(shortTitle)
                         .font(.system(size: large ? 19 : 11, weight: .semibold, design: .serif))
-                         .foregroundStyle(UIImage(named: artworkName) == nil ? ink : (artworkName == "BookCover02" || artworkName == "BookCover07" || artworkName == "BookCover01" || artworkName == "BookCover10" ? Color(red: 0.97, green: 0.85, blue: 0.62) : Color(red: 0.25, green: 0.20, blue: 0.16)))
+                         .foregroundStyle(UIImage(named: artworkName) == nil ? ink : artworkTitleColor)
                         .multilineTextAlignment(.center)
                         .lineLimit(large ? 4 : 3)
                         .minimumScaleFactor(0.68)
