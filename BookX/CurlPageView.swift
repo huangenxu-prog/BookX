@@ -98,6 +98,11 @@ struct CurlPageView: UIViewControllerRepresentable {
             AnyView(
                 VStack(spacing: 0) {
                     parent.header
+                        // UIPageViewController retains adjacent pages. Their
+                        // off-screen headers must not expose duplicate "返回"
+                        // buttons to accessibility or UI automation.
+                        .accessibilityHidden(index != parent.currentPage)
+                        .allowsHitTesting(index == parent.currentPage)
                         .padding(.top, parent.topInset)
                         .frame(height: CurlPageView.headerHeight + parent.topInset)
                     Group {
