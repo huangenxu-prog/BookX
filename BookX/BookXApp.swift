@@ -257,47 +257,24 @@ private struct BookCover: View {
             let w = geometry.size.width
             let h = geometry.size.height
             ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(LinearGradient(colors: [
-                        cloth.opacity(0.85), cloth, cloth.opacity(0.94)
-                    ], startPoint: .topLeading, endPoint: .bottomTrailing))
-
-                // Deterministic fine cloth grain; no external assets or network.
-                Canvas { context, size in
-                    for i in 0..<180 {
-                        let x = CGFloat((i * 47 + 13) % 191) / 191 * size.width
-                        let y = CGFloat((i * 83 + 29) % 223) / 223 * size.height
-                        let dot = CGRect(x: x, y: y, width: 0.55, height: 0.8)
-                        context.fill(Path(ellipseIn: dot), with: .color(.white.opacity(0.10)))
-                    }
-                }
-                .allowsHitTesting(false)
-
-                // The illustration is drawn in vectors and scales with the cover.
-                BookCoverArtwork(variant: style, color: lightCover ?
-                    Color(red: 0.40, green: 0.36, blue: 0.28) : gold)
-                    .frame(width: w * 0.91, height: h * 0.46)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                    .opacity(lightCover ? 0.60 : 0.80)
-                    .clipped()
-
-                RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(gold.opacity(lightCover ? 0.38 : 0.73), lineWidth: 0.75)
-                    .padding(.leading, 12).padding(.trailing, 7).padding(.vertical, 8)
-
-                HStack(spacing: 0) {
-                    Rectangle().fill(.black.opacity(0.19)).frame(width: 5)
-                    Rectangle().fill(.white.opacity(0.14)).frame(width: 2)
-                    Spacer(minLength: 0)
-                }
-
                 if UIImage(named: artworkName) != nil {
-                    // The build extracts the entire physical book. Show its
-                    // spine and all four edges without a second image crop.
+                    // The physical-book asset is the complete cover. Never put
+                    // a cloth-colored card behind it or crop its outer edges.
                     Image(artworkName)
                         .resizable()
                         .scaledToFit()
                         .frame(width: w, height: h)
+                } else {
+                    // Fallback is used only when a cover asset is genuinely missing.
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(cloth)
+                    BookCoverArtwork(variant: style, color: lightCover ?
+                        Color(red: 0.40, green: 0.36, blue: 0.28) : gold)
+                        .frame(width: w * 0.91, height: h * 0.46)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                    RoundedRectangle(cornerRadius: 3)
+                        .strokeBorder(gold.opacity(0.73), lineWidth: 0.75)
+                        .padding(.leading, 12).padding(.trailing, 7).padding(.vertical, 8)
                 }
 
                 VStack(spacing: 7) {
@@ -314,7 +291,6 @@ private struct BookCover: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .aspectRatio(0.69, contentMode: .fit)
         .shadow(color: .black.opacity(0.17), radius: 9, x: 2, y: 8)
