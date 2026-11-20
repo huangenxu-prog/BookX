@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReaderView: View {
     let book: BookItem
+    var onClose: (() -> Void)? = nil
     @EnvironmentObject private var library: BookLibrary
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -176,7 +177,7 @@ struct ReaderView: View {
 
     private var readerHeader: some View {
         HStack {
-                Button { dismiss() } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
+                Button { if let onClose { onClose() } else { dismiss() } } label: { Image(systemName: "chevron.left").font(.title3).frame(width: 44, height: 44) }
                     .accessibilityLabel("返回")
                 Spacer()
                 Text(book.title)
