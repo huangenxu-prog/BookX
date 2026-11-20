@@ -465,11 +465,14 @@ private struct ReaderOpeningTransition: View {
                         .opacity(revealReader ? 0 : 1)
                         .allowsHitTesting(!revealReader)
                         .accessibilityHidden(true)
+                        .ignoresSafeArea()
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
-            .background(Color(red: 0.96, green: 0.92, blue: 0.83))
-            .ignoresSafeArea()
+            // Only the transition artwork and paper extend under system bars.
+            // ReaderView owns its safe-area policy: curl is full-screen, while
+            // scroll/swipe controls must remain inside the interactive area.
+            .background(Color(red: 0.96, green: 0.92, blue: 0.83).ignoresSafeArea())
         }
         .onAppear {
             guard !reduceMotion else { revealReader = true; return }

@@ -20,6 +20,35 @@ final class BookXUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+    private func closeReader(_ app: XCUIApplication) {
+        let back = app.buttons["返回"]
+        XCTAssertTrue(back.isHittable)
+        let statusBar = app.statusBars.firstMatch
+        if statusBar.exists {
+            XCTAssertGreaterThanOrEqual(back.frame.minY, statusBar.frame.maxY,
+                                        "Reader controls must not overlap the system status bar")
+        }
+        app.buttons["返回"].tap()
+        // The reader is a full-screen presentation. Wait for its dismissal
+        // before interacting with the underlying shelf tab; otherwise the
+        // tap can be consumed by the departing modal.
+        let readerClosed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: app.buttons["返回"]
+        )
+        let dismissalResult = XCTWaiter.wait(for: [readerClosed], timeout: 15)
+        if dismissalResult != .completed {
+            print("BOOKX_DISMISS_DIAGNOSTIC: reader back still exists after close")
+            print("BOOKX_DISMISS_DIAGNOSTIC: " + app.debugDescription)
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Reader-dismissal-failure"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        XCTAssertEqual(dismissalResult, .completed)
+        XCTAssertFalse(app.staticTexts["reading-position"].exists)
+        XCTAssertTrue(app.buttons["tab-shelf"].isHittable)
+    }
     func testTXTReadResumeAcrossRelaunch() {
         let app = launchFresh()
         snapshot("01-library")
@@ -31,7 +60,7 @@ final class BookXUITests: XCTestCase {
         XCTAssertFalse(position.label.hasPrefix("1 /"))
         let saved = position.label
         snapshot("02-reader")
-        app.buttons["返回"].tap()
+        closeReader(app)
         app.buttons["tab-shelf"].tap()
         XCTAssertTrue(app.buttons["continue-reading"].waitForExistence(timeout: 5))
         snapshot("03-bookshelf")
@@ -61,26 +90,9 @@ final class BookXUITests: XCTestCase {
         let position = app.staticTexts["reading-position"].firstMatch
         let saved = position.label
         XCTAssertFalse(saved.hasPrefix("1 /"))
-        app.buttons["返回"].tap()
-        // The reader is a full-screen presentation. Wait for its dismissal
-        // before interacting with the underlying shelf tab; otherwise the
-        // tap can be consumed by the departing modal.
+        snapshot("05-scroll-before-close")
+        closeReader(app)
         let shelfTab = app.buttons["tab-shelf"]
-        XCTAssertTrue(shelfTab.waitForExistence(timeout: 15))
-        let readerClosed = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"),
-            object: app.buttons["返回"]
-        )
-        let dismissalResult = XCTWaiter.wait(for: [readerClosed], timeout: 15)
-        if dismissalResult != .completed {
-            print("BOOKX_DISMISS_DIAGNOSTIC: reader back still exists after close")
-            print("BOOKX_DISMISS_DIAGNOSTIC: " + app.debugDescription)
-            let attachment = XCTAttachment(screenshot: app.screenshot())
-            attachment.name = "Reader-dismissal-failure"
-            attachment.lifetime = .keepAlways
-            add(attachment)
-        }
-        XCTAssertEqual(dismissalResult, .completed)
         shelfTab.tap()
         let resume = app.buttons["continue-reading"]
         XCTAssertTrue(resume.waitForExistence(timeout: 15), "Continue-reading button should appear after returning to shelf")
