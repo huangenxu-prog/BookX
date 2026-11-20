@@ -335,6 +335,7 @@ struct ReaderView: View {
         } catch {
             guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
+            onInitialReady?()
         }
     }
     private func install(_ parsed: BookDocument, pages result: [ReadingPage]) {
@@ -415,6 +416,7 @@ struct ReaderView: View {
         } catch {
             guard !Task.isCancelled, generation == paginationGeneration else { return }
             errorMessage = error.localizedDescription
+            onInitialReady?()
         }
     }
     private func jumpToChapter(_ resource: Int) {
