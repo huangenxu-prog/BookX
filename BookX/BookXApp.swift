@@ -441,6 +441,7 @@ private struct BookOpeningOverlay: View {
 
 private struct ReaderOpeningTransition: View {
     let book: BookItem
+    let onClose: () -> Void
     @EnvironmentObject private var library: BookLibrary
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealReader = false
@@ -448,7 +449,7 @@ private struct ReaderOpeningTransition: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                ReaderView(book: book)
+                ReaderView(book: book, onClose: onClose)
                     .environmentObject(library)
                     .opacity(revealReader || reduceMotion ? 1 : 0)
 
@@ -594,7 +595,7 @@ struct RootView: View {
                 SettingsView().environmentObject(library).presentationDetents([.medium, .large])
             }
             .fullScreenCover(item: $selected) { book in
-                ReaderOpeningTransition(book: book)
+                ReaderOpeningTransition(book: book, onClose: { selected = nil })
                     .environmentObject(library)
             }
 
