@@ -293,7 +293,9 @@ private struct BookCover: View {
                     Image(artworkName)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: w, height: h)
+                        // The source includes an outer decorative margin.
+                        // Crop that margin inside the fixed cover bounds.
+                        .frame(width: w * 1.24, height: h * 1.24)
                         .frame(width: w, height: h)
                         .clipped()
                 }
@@ -516,7 +518,7 @@ private struct BookOpeningOverlay: View {
                 // Library spines face sideways; rotate the cover into view.
                 // Shelf covers are already front-facing and remain unchanged.
                 .rotation3DEffect(
-                    .degrees(fromLibrary && stage == 0 ? 78 : 0),
+                    .degrees(fromLibrary ? (stage == 0 ? 82 : (stage == 1 ? 38 : 0)) : 0),
                     axis: (x: 0, y: 1, z: 0),
                     perspective: 0.42
                 )
