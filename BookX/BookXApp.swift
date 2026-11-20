@@ -554,6 +554,10 @@ private struct ReaderOpeningTransition: View {
             })
                 .environmentObject(library)
                 .opacity(revealReader || reduceMotion ? 1 : 0)
+                // Invisible reader controls must not enter the accessibility
+                // tree before the cover-to-reader transition is complete.
+                .accessibilityHidden(!revealReader && !reduceMotion)
+                .allowsHitTesting(revealReader || reduceMotion)
 
             if !reduceMotion {
                 // A single, short cover-to-reader dissolve. Do not introduce
