@@ -228,16 +228,21 @@ private struct BookCover: View {
     }
     // Cover artwork and title color are one fixed visual theme.
     // Dark cloth uses warm ivory/gold; parchment uses dark brown.
+    // Each artwork owns its typography. Never derive contrast from book title.
+    private var coverNumber: Int { Int(artworkName.suffix(2)) ?? 1 }
     private var artworkTitleColor: Color {
-        switch artworkName {
-        case "BookCover01", "BookCover02", "BookCover03",
-             "BookCover05", "BookCover07", "BookCover08", "BookCover10":
-            return Color(red: 0.97, green: 0.87, blue: 0.68)
-        case "BookCover04", "BookCover06", "BookCover09",
-             "BookCover11", "BookCover12":
-            return Color(red: 0.23, green: 0.19, blue: 0.15)
-        default:
-            return ink
+        // All photographed covers have dark upper artwork or detailed foliage;
+        // bright ivory with a dark outline is legible over both.
+        switch coverNumber {
+        case 4, 8, 12: return Color(red: 1.0, green: 0.97, blue: 0.86)
+        default: return Color(red: 1.0, green: 0.93, blue: 0.75)
+        }
+    }
+    private var artworkTitlePosition: CGFloat {
+        switch coverNumber {
+        case 4, 8, 12: return 0.24
+        case 3, 7, 11: return 0.18
+        default: return 0.13
         }
     }
     private var shortTitle: String {
@@ -295,16 +300,17 @@ private struct BookCover: View {
                         .scaledToFill()
                         // The source includes an outer decorative margin.
                         // Crop that margin inside the fixed cover bounds.
-                        .frame(width: w * 1.24, height: h * 1.24)
+                        .frame(width: w, height: h)
                         .frame(width: w, height: h)
                         .clipped()
                 }
 
                 VStack(spacing: 7) {
-                    Spacer().frame(height: h * 0.15)
+                    Spacer().frame(height: h * artworkTitlePosition)
                     Text(shortTitle)
                         .font(.system(size: large ? 19 : 11, weight: .semibold, design: .serif))
                          .foregroundStyle(UIImage(named: artworkName) == nil ? ink : artworkTitleColor)
+                        .shadow(color: .black.opacity(0.95), radius: 1.7, x: 0, y: 1)
                         .multilineTextAlignment(.center)
                         .lineLimit(large ? 4 : 3)
                         .minimumScaleFactor(0.68)
