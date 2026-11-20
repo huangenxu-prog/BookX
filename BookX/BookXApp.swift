@@ -292,18 +292,12 @@ private struct BookCover: View {
                 }
 
                 if UIImage(named: artworkName) != nil {
-                    // Source illustrations contain a centered book surrounded
-                    // by a wide parchment margin. Fill with the actual book,
-                    // rather than showing a miniature book inside the cover.
+                    // The build extracts the entire physical book. Show its
+                    // spine and all four edges without a second image crop.
                     Image(artworkName)
                         .resizable()
-                        .scaledToFill()
-                        // The source includes an outer decorative margin.
-                        // Crop that margin inside the fixed cover bounds.
-                        // Slight overscan removes the photographed paper edges,
-                        // while keeping the book illustration centered.
+                        .scaledToFit()
                         .frame(width: w, height: h)
-                        .clipped()
                 }
 
                 VStack(spacing: 7) {
