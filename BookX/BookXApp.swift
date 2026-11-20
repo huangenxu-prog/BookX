@@ -291,7 +291,6 @@ private struct BookCover: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: w, height: h)
-                        .scaleEffect(2.05)
                         .frame(width: w, height: h)
                         .clipped()
                 }
