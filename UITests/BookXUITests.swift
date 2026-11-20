@@ -71,7 +71,16 @@ final class BookXUITests: XCTestCase {
             predicate: NSPredicate(format: "exists == false"),
             object: app.buttons["返回"]
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [readerClosed], timeout: 15), .completed)
+        let dismissalResult = XCTWaiter.wait(for: [readerClosed], timeout: 15)
+        if dismissalResult != .completed {
+            print("BOOKX_DISMISS_DIAGNOSTIC: reader back still exists after close")
+            print("BOOKX_DISMISS_DIAGNOSTIC: " + app.debugDescription)
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Reader-dismissal-failure"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        XCTAssertEqual(dismissalResult, .completed)
         shelfTab.tap()
         let resume = app.buttons["continue-reading"]
         XCTAssertTrue(resume.waitForExistence(timeout: 15), "Continue-reading button should appear after returning to shelf")
