@@ -212,6 +212,13 @@ private struct BookCover: View {
             Color(red: 0.84, green: 0.80, blue: 0.71)
         ][style]
     }
+    private var artworkName: String {
+        let seed = title.unicodeScalars.reduce(UInt64(1469598103934665603)) {
+            ($0 ^ UInt64($1.value)) &* UInt64(1099511628211)
+        }
+        let index = [1, 2, 7, 10, 4, 9][style]
+        return String(format: "BookCover%02d", index)
+    }
     private var lightCover: Bool { style == 1 || style == 5 }
     private var gold: Color { Color(red: 0.82, green: 0.68, blue: 0.44) }
     private var ink: Color {
@@ -262,6 +269,14 @@ private struct BookCover: View {
                     Rectangle().fill(.black.opacity(0.19)).frame(width: 5)
                     Rectangle().fill(.white.opacity(0.14)).frame(width: 2)
                     Spacer(minLength: 0)
+                }
+
+                if UIImage(named: artworkName) != nil {
+                    Image(artworkName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: w, height: h)
+                        .clipped()
                 }
 
                 VStack(spacing: 7) {
