@@ -568,17 +568,13 @@ struct RootView: View {
         library.books.filter { $0.lastRead != nil && $0.hiddenFromShelf != true }
             .sorted { ($0.lastRead ?? .distantPast) > ($1.lastRead ?? .distantPast) }
     }
-    private var sortedBooks: [BookItem] {
-        library.books.sorted {
-            $0.title.compare($1.title, options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "zh_CN")) == .orderedAscending
-        }
+    // Import order is preserved by BookLibrary.books; newest imported first.
+    private var newBooks: [BookItem] {
+        library.books.filter { $0.lastRead == nil }.reversed()
     }
-    private func initial(_ title: String) -> String {
-        guard let first = title.first else { return "#" }
-        let latin = (String(first).applyingTransform(.toLatin, reverse: false) ?? String(first))
-            .folding(options: .diacriticInsensitive, locale: Locale(identifier: "zh_CN"))
-        let letter = latin.prefix(1).uppercased()
-        return letter.range(of: "^[A-Z]$", options: .regularExpression) == nil ? "#" : letter
+    private var readBooks: [BookItem] {
+        library.books.filter { $0.lastRead != nil }
+            .sorted { ($0.lastRead ?? .distantPast) > ($1.lastRead ?? .distantPast) }
     }
     var body: some View {
         presentedReader
@@ -591,7 +587,7 @@ struct RootView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         header
-                        if tab == 0 { shelfContent } else { libraryContent }
+                        if tab == 0 { continueContent } else { shelfContent }
                     }
                     .padding(.horizontal, 22)
                     .padding(.top, 18)
@@ -684,7 +680,7 @@ struct RootView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .center, spacing: 9) {
-                Text(tab == 0 ? "书架" : "书库")
+                Text(tab == 0 ? "" : "书架")
                     .font(.system(size: 30, weight: .bold))
                     .foregroundStyle(BookXStyle.ink)
                 Text("阅")
@@ -708,58 +704,80 @@ struct RootView: View {
                 .foregroundStyle(BookXStyle.muted)
         }.padding(.bottom, 9)
     }
-    @ViewBuilder private var shelfContent: some View {
-        if let first = recent.first {
-            Button { selected = first } label: {
-                HStack(alignment: .center, spacing: 17) {
-                    BookCover(title: first.title, large: true).frame(width: 116)
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("继续阅读").font(.subheadline.weight(.medium)).foregroundStyle(BookXStyle.purple)
-                        Text(first.title).font(.system(size: 23, weight: .bold)).foregroundStyle(BookXStyle.ink).lineLimit(2)
-                        if !first.author.isEmpty {
-                            Text(first.author).font(.subheadline).foregroundStyle(BookXStyle.muted)
-                        }
-                        Text("已读 \(Int(first.progress * 100))%")
-                            .font(.subheadline).foregroundStyle(BookXStyle.muted)
-                        progressBar(first.progress)
-                        Text("继续")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 18).padding(.vertical, 9)
-                            .background(BookXStyle.purple, in: Capsule())
-                    }
-                    Spacer(minLength: 0)
+    @ViewBuilder private var continueContent: some View {
+        if let book = recent.first {
+            VStack(spacing: 22) {
+                Button { selected = book } label: {
+                    BookCover(title: book.title, large: true)
+                        .frame(width: 206)
                 }
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(BookXStyle.panel, in: RoundedRectangle(cornerRadius: 24))
-                .shadow(color: BookXStyle.purple.opacity(0.09), radius: 16, y: 7)
-            }.buttonStyle(.plain).accessibilityIdentifier("continue-reading")
-            .contextMenu {
-                Button("移出书架", systemImage: "books.vertical") { pendingShelfRemoval = first }
-            }
-            if recent.count > 1 {
-                sectionTitle("更早读过").padding(.top, 4)
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 20) {
-                    ForEach(recent.dropFirst()) { book in
-                        Button { selected = book } label: {
-                            VStack(alignment: .leading, spacing: 7) {
-                                BookCover(title: book.title, large: true)
-                                Text(book.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                                Text("已读 \(Int(book.progress * 100))%")
-                                    .font(.caption).foregroundStyle(BookXStyle.muted)
-                                progressBar(book.progress)
-                            }.foregroundStyle(BookXStyle.ink)
-                        }.buttonStyle(.plain)
-                        .contextMenu {
-                            Button("移出书架", systemImage: "books.vertical") { pendingShelfRemoval = book }
-                        }
-                    }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("continue-reading")
+                Button { selected = book } label: {
+                    Label(book.progress >= 0.999 ? "重新阅读" : "继续阅读",
+                          systemImage: book.progress >= 0.999 ? "arrow.counterclockwise" : "book")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(BookXStyle.purple)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("continue-reading-label")
             }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 66)
         } else {
-            ContentUnavailableView("还没有阅读记录", systemImage: "books.vertical", description: Text("从书库打开一本书，即可在这里继续阅读"))
+            VStack(spacing: 18) {
+                Image(systemName: "book.pages")
+                    .font(.system(size: 76, weight: .ultraLight))
+                    .foregroundStyle(BookXStyle.muted.opacity(0.55))
+                Text("还没有阅读记录")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(BookXStyle.purple)
+                Text("从书架选择一本书，开始阅读")
+                    .font(.subheadline)
+                    .foregroundStyle(BookXStyle.muted)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 150)
+        }
+    }
+
+    private func coverGrid(_ books: [BookItem]) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 20) {
+            ForEach(books) { book in
+                Button { selected = book } label: {
+                    VStack(alignment: .leading, spacing: 7) {
+                        BookCover(title: book.title, large: true)
+                        Text(book.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        Text("已读 \\(Int(book.progress * 100))%")
+                            .font(.caption).foregroundStyle(BookXStyle.muted)
+                        progressBar(book.progress)
+                    }
+                    .foregroundStyle(BookXStyle.ink)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("library-book-" + book.title)
+                .contextMenu {
+                    Button("删除书籍", role: .destructive) { pendingDeletion = book }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var shelfContent: some View {
+        if library.books.isEmpty {
+            ContentUnavailableView("书架为空", systemImage: "book.closed", description: Text("点击下方 + 导入电子书"))
                 .padding(.top, 45)
+        } else {
+            if !newBooks.isEmpty {
+                sectionTitle("新加入的书")
+                coverGrid(newBooks)
+            }
+            if !readBooks.isEmpty {
+                sectionTitle("更早读过").padding(.top, newBooks.isEmpty ? 0 : 10)
+                coverGrid(readBooks)
+            }
         }
     }
     @State private var pullingBook: UUID?
@@ -789,68 +807,6 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder private var libraryContent: some View {
-        if library.books.isEmpty {
-            ContentUnavailableView("书库为空", systemImage: "book.closed", description: Text("点击下方 + 导入电子书"))
-                .padding(.top, 45)
-        } else {
-            // Dense real-bookshelf layout: nine original-proportion spines per row.
-            // Keep each spine at its original minimum 33pt width; never compress
-            // artwork to fill the shelf. At 9 x 33 + 8 x 2 = 313pt, the row
-            // fits the usable width of iPhone 16 without horizontal scrolling.
-            GeometryReader { geometry in
-                let availableWidth = max(0, geometry.size.width)
-                let spineWidth: CGFloat = 33
-                let gap: CGFloat = 2
-                VStack(spacing: 24) {
-                    ForEach(Array(stride(from: 0, to: sortedBooks.count, by: 9)), id: \.self) { start in
-                        VStack(spacing: 0) {
-                            HStack(alignment: .bottom, spacing: gap) {
-                                ForEach(Array(sortedBooks[start..<min(start + 9, sortedBooks.count)].enumerated()), id: \.element.id) { offset, book in
-                                    Button { takeBook(book) } label: {
-                                        BookSpine(title: book.title,
-                                                  seed: book.title.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) },
-                                                  styleIndex: Int((book.title.unicodeScalars.reduce(UInt64(1469598103934665603)) { ($0 ^ UInt64($1.value)) &* UInt64(1099511628211) }) % 10),
-                                                  width: spineWidth)
-                                            .frame(width: spineWidth, height: 230)
-                                            .clipped()
-                                            .offset(y: pullingBook == book.id ? -22 : 0)
-                                            .scaleEffect(pullingBook == book.id ? 1.07 : 1)
-                                    }
-                                    .frame(width: spineWidth, height: 230)
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(book.title)
-                                    .accessibilityIdentifier("library-book-" + book.title)
-                                    .contextMenu {
-                                        Button("删除书籍", role: .destructive) { pendingDeletion = book }
-                                    }
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(LinearGradient(colors: [
-                                    Color(red: 0.78, green: 0.53, blue: 0.32),
-                                    Color(red: 0.55, green: 0.33, blue: 0.18)
-                                ], startPoint: .top, endPoint: .bottom))
-                                .frame(height: 10)
-                                .overlay {
-                                    if UIImage(named: "BookShelfWood") != nil {
-                                        Image("BookShelfWood").resizable().scaledToFill()
-                                            .frame(height: 10).clipped()
-                                    }
-                                }
-                                .overlay(alignment: .top) {
-                                    Rectangle().fill(.white.opacity(0.38)).frame(height: 1)
-                                }
-                                .shadow(color: .black.opacity(0.20), radius: 4, y: 4)
-                        }
-                    }
-                }
-                .frame(width: availableWidth, alignment: .center)
-            }
-            .frame(height: CGFloat((sortedBooks.count + 8) / 9) * 240 + CGFloat(max(0, (sortedBooks.count + 8) / 9 - 1)) * 24)
-        }
-    }
     private func sectionTitle(_ title: String) -> some View {
         HStack(spacing: 9) {
             Capsule().fill(BookXStyle.purple).frame(width: 4, height: 21)
@@ -867,7 +823,7 @@ struct RootView: View {
     }
     private var bottomBar: some View {
         HStack(spacing: 9) {
-            tabButton("books.vertical", "书架", index: 0)
+            tabButton("book", "继续阅读", index: 0)
             Button { importer = true } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 32, weight: .light))
@@ -877,7 +833,7 @@ struct RootView: View {
             }
             .accessibilityLabel("导入书籍")
             .disabled(library.importing)
-            tabButton("line.3.horizontal", "书库", index: 1)
+            tabButton("books.vertical", "书架", index: 1)
         }
         .padding(7)
         .background { glassBarBackground }
