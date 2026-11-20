@@ -22,7 +22,8 @@ final class BookXUITests: XCTestCase {
     }
     private func closeReader(_ app: XCUIApplication) {
         let back = app.buttons["返回"]
-        XCTAssertTrue(back.isHittable)
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: back)
+        XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 10), .completed)
         let statusBar = app.statusBars.firstMatch
         if statusBar.exists {
             XCTAssertGreaterThanOrEqual(back.frame.minY, statusBar.frame.maxY,
