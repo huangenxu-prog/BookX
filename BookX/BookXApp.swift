@@ -302,7 +302,6 @@ private struct BookCover: View {
                         // Crop that margin inside the fixed cover bounds.
                         // Slight overscan removes the photographed paper edges,
                         // while keeping the book illustration centered.
-                        .frame(width: w * 1.085, height: h * 1.085)
                         .frame(width: w, height: h)
                         .clipped()
                 }
@@ -546,12 +545,18 @@ private struct ReaderOpeningTransition: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealReader = false
     @State private var readerReady = false
+    @State private var openingMotionFinished = false
+
+    private func revealIfReady() {
+        guard readerReady, openingMotionFinished else { return }
+        withAnimation(.easeOut(duration: 0.42)) { revealReader = true }
+    }
 
     var body: some View {
         ZStack {
             ReaderView(book: book, onClose: onClose, onInitialReady: {
                 readerReady = true
-                withAnimation(.easeOut(duration: 0.36)) { revealReader = true }
+                revealIfReady()
             })
                 .environmentObject(library)
                 .opacity(revealReader || reduceMotion ? 1 : 0)
@@ -571,7 +576,13 @@ private struct ReaderOpeningTransition: View {
         .onAppear {
             // ReaderView starts loading immediately behind the cover.
             // Keep the cover visible until its first pages are ready.
-            if reduceMotion { revealReader = true }
+            if reduceMotion { openingMotionFinished = true; revealIfReady(); return }
+            Task { @MainActor in
+                // Allow the physical cover to settle while ReaderView prepares pages.
+                try? await Task.sleep(for: .milliseconds(560))
+                openingMotionFinished = true
+                revealIfReady()
+            }
         }
     }
 }
