@@ -570,7 +570,7 @@ struct RootView: View {
     }
     // Import order is preserved by BookLibrary.books; newest imported first.
     private var newBooks: [BookItem] {
-        library.books.filter { $0.lastRead == nil }.reversed()
+        Array(library.books.filter { $0.lastRead == nil }.reversed())
     }
     private var readBooks: [BookItem] {
         library.books.filter { $0.lastRead != nil }
