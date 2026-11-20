@@ -46,6 +46,7 @@ jobs:
       - name: Install twelve illustrated book covers
         run: |
           set -euo pipefail
+          python3 -m pip install --quiet --break-system-packages pillow numpy
           python3 - <<'PY'
           import json, zipfile
           from pathlib import Path
@@ -59,18 +60,38 @@ jobs:
                   dest = base / f"BookCover{n:02d}.imageset"
                   dest.mkdir(parents=True, exist_ok=True)
                   (dest / name).write_bytes(z.read(name))
-                  # Crop the photographed book itself; the 600x800 source
-                  # includes large beige margins that must not be rendered.
-                  import subprocess
-                  top = {5: 229, 6: 229, 7: 229}.get(n, 202 if n in (9, 10, 11, 12) else 208)
-                  left = 161 if n in (4, 8, 12) else 155
-                  # Remove remaining photographed backdrop at the top/bottom
-                  # without scaling the cover in SwiftUI. Preserve the spine.
-                  subprocess.run([
-                      "sips", "-c", "352", "266",
-                      "--cropOffset", str(top + 14), str(left + 5),
-                      str(dest / name), "--out", str(dest / name)
-                  ], check=True, stdout=subprocess.DEVNULL)
+                  # Detect the actual outer book edges in the original image.
+                  # Do not use a fixed crop: the twelve photographed books have
+                  # different top/side margins. Preserve the entire book/spine.
+                  from PIL import Image, ImageChops
+                  import io
+                  source = Image.open(io.BytesIO(z.read(name))).convert("RGB")
+                  import numpy as np
+                  pixels = np.asarray(source, dtype=np.int16)
+                  height, width = pixels.shape[:2]
+                  # Background is nearly uniform beige. Estimate it from corners.
+                  corners = np.concatenate([
+                      pixels[:35, :35].reshape(-1, 3),
+                      pixels[:35, -35:].reshape(-1, 3),
+                      pixels[-35:, :35].reshape(-1, 3),
+                      pixels[-35:, -35:].reshape(-1, 3)
+                  ])
+                  backdrop = np.median(corners, axis=0)
+                  distance = np.max(np.abs(pixels - backdrop), axis=2)
+                  # A row/column belongs to the book when a substantial part
+                  # differs from the surrounding paper. Ignore soft drop shadows.
+                  foreground = distance > 38
+                  rows = np.where(foreground.sum(axis=1) > width * 0.25)[0]
+                  cols = np.where(foreground.sum(axis=0) > height * 0.25)[0]
+                  if len(rows) < 200 or len(cols) < 120:
+                      raise RuntimeError(f"Cannot identify complete book: {name}")
+                  x0, x1 = max(0, int(cols[0]) - 3), min(width, int(cols[-1]) + 4)
+                  y0, y1 = max(0, int(rows[0]) - 3), min(height, int(rows[-1]) + 4)
+                  book = source.crop((x0, y0, x1, y1))
+                  # Use a transparent canvas matching the physical book ratio.
+                  # Aspect-fit later in SwiftUI avoids clipping book edges.
+                  book.save(dest / name, quality=95)
+                  print(f"{name}: book bounds {(x0,y0,x1,y1)}")
                   contents = {"images": [{"filename": name, "idiom": "universal"}],
                               "info": {"author": "xcode", "version": 1}}
                   (dest / "Contents.json").write_text(json.dumps(contents))
