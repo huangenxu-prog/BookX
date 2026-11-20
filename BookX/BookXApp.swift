@@ -805,9 +805,6 @@ struct RootView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         BookCover(title: book.title, large: true)
                         Text(book.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                        Text("已读 \(Int(book.progress * 100))%")
-                            .font(.caption).foregroundStyle(BookXStyle.muted)
-                        progressBar(book.progress)
                     }
                     .foregroundStyle(BookXStyle.ink)
                 }
