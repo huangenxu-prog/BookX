@@ -62,7 +62,17 @@ final class BookXUITests: XCTestCase {
         let saved = position.label
         XCTAssertFalse(saved.hasPrefix("1 /"))
         app.buttons["返回"].tap()
-        app.buttons["tab-shelf"].tap()
+        // The reader is a full-screen presentation. Wait for its dismissal
+        // before interacting with the underlying shelf tab; otherwise the
+        // tap can be consumed by the departing modal.
+        let shelfTab = app.buttons["tab-shelf"]
+        XCTAssertTrue(shelfTab.waitForExistence(timeout: 15))
+        let readerClosed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: app.buttons["返回"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [readerClosed], timeout: 15), .completed)
+        shelfTab.tap()
         let resume = app.buttons["continue-reading"]
         XCTAssertTrue(resume.waitForExistence(timeout: 15), "Continue-reading button should appear after returning to shelf")
         resume.tap()
