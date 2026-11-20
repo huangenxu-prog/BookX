@@ -3,6 +3,7 @@ import SwiftUI
 struct ReaderView: View {
     let book: BookItem
     var onClose: (() -> Void)? = nil
+    var onInitialReady: (() -> Void)? = nil
     @EnvironmentObject private var library: BookLibrary
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -348,6 +349,7 @@ struct ReaderView: View {
             currentPage = min(pages.count - 1, max(0, Int(saved.progress * Double(max(1, pages.count - 1)))))
         }
         loaded = true
+        onInitialReady?()
         savePosition()
     }
 
@@ -407,6 +409,7 @@ struct ReaderView: View {
             visibleLocation = pages[currentPage].location
             windowRevision = UUID()
             loaded = true
+            onInitialReady?()
             savePosition()
             prefetchChapters()
         } catch {
