@@ -188,50 +188,77 @@ private enum BookXStyle {
 private struct BookCover: View {
     let title: String
     let large: Bool
-    private var palette: [Color] {
-        let palettes: [[Color]] = [
-            [Color(red: 0.31, green: 0.47, blue: 0.41), Color(red: 0.09, green: 0.24, blue: 0.20)],
-            [Color(red: 0.83, green: 0.83, blue: 0.81), Color(red: 0.16, green: 0.17, blue: 0.17)],
-            [Color(red: 0.88, green: 0.86, blue: 0.79), Color(red: 0.18, green: 0.18, blue: 0.17)],
-            [Color(red: 0.75, green: 0.67, blue: 0.53), Color(red: 0.20, green: 0.17, blue: 0.14)]
-        ]
-        let index = title.unicodeScalars.reduce(0) { $0 + Int($1.value) } % palettes.count
-        return palettes[index]
+
+    // Stable, restrained cloth-bound palettes; never change on relaunch.
+    private var style: Int {
+        let name = title.components(separatedBy: ["（", "(", "【", "["]).first ?? title
+        if name.contains("明朝") { return 0 }
+        if name.contains("万历") { return 1 }
+        if name.contains("罪与罚") { return 2 }
+        if name.contains("十日") { return 3 }
+        if name.contains("牧神") { return 4 }
+        if name.contains("道氏") { return 5 }
+        return Int(name.unicodeScalars.reduce(UInt64(1469598103934665603)) {
+            ($0 ^ UInt64($1.value)) &* 1099511628211
+        } % 6)
     }
+    private var cloth: Color {
+        [
+            Color(red: 0.13, green: 0.32, blue: 0.26),
+            Color(red: 0.83, green: 0.76, blue: 0.63),
+            Color(red: 0.11, green: 0.23, blue: 0.33),
+            Color(red: 0.37, green: 0.17, blue: 0.18),
+            Color(red: 0.14, green: 0.25, blue: 0.33),
+            Color(red: 0.77, green: 0.72, blue: 0.61)
+        ][style]
+    }
+    private var lightCover: Bool { style == 1 || style == 5 }
+    private var gold: Color { Color(red: 0.83, green: 0.70, blue: 0.46) }
+    private var ink: Color {
+        lightCover ? Color(red: 0.27, green: 0.22, blue: 0.16) : Color(red: 0.96, green: 0.86, blue: 0.66)
+    }
+    private var shortTitle: String {
+        title.components(separatedBy: ["（", "(", "【", "["]).first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? title
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 6)
-                .fill(LinearGradient(colors: palette, startPoint: .top, endPoint: .bottom))
+                .fill(LinearGradient(colors: [
+                    cloth.opacity(0.83), cloth, cloth.opacity(0.91)
+                ], startPoint: .topLeading, endPoint: .bottomTrailing))
+            // Debossed double border and a subtle stitched spine.
             RoundedRectangle(cornerRadius: 3)
-                .stroke(.white.opacity(0.28), lineWidth: 1)
-                .padding(.leading, 11).padding(.trailing, 7).padding(.vertical, 7)
+                .strokeBorder(gold.opacity(lightCover ? 0.46 : 0.75), lineWidth: 0.8)
+                .padding(.leading, 12).padding(.trailing, 7).padding(.vertical, 8)
             HStack(spacing: 0) {
-                Rectangle().fill(.black.opacity(0.18)).frame(width: 6)
+                Rectangle().fill(.black.opacity(0.18)).frame(width: 5)
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 2)
                 Spacer(minLength: 0)
             }
-            HStack(alignment: .top) {
-                Text("读")
-                    .font(.system(size: large ? 10 : 7, weight: .bold))
-                    .foregroundStyle(BookXStyle.purple)
-                    .padding(4)
-                    .background(BookXStyle.paper.opacity(0.95), in: RoundedRectangle(cornerRadius: 2))
-                Spacer()
-                Text(title.count > (large ? 14 : 10) ? String(title.prefix(large ? 13 : 9)) + "…" : title)
-                    .font(.system(size: large ? 17 : 11, weight: .semibold, design: .serif))
-                    .foregroundStyle(.white.opacity(0.95))
-                    .lineLimit(large ? 4 : 3)
+            VStack(spacing: large ? 13 : 7) {
+                Spacer(minLength: large ? 19 : 10)
+                Text(shortTitle)
+                    .font(.system(size: large ? 19 : 11, weight: .semibold, design: .serif))
+                    .foregroundStyle(ink)
                     .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity)
+                    .lineLimit(large ? 4 : 3)
+                    .minimumScaleFactor(0.72)
+                    .padding(.horizontal, large ? 16 : 9)
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(gold.opacity(0.8))
+                    .frame(width: large ? 24 : 12, height: 1)
+                Spacer(minLength: 0)
+                Image(systemName: ["building.columns", "mountain.2", "leaf", "camera.macro", "sparkle", "mountain.2"][style])
+                    .font(.system(size: large ? 37 : 18, weight: .ultraLight))
+                    .foregroundStyle(gold.opacity(lightCover ? 0.60 : 0.75))
+                    .padding(.bottom, large ? 24 : 13)
             }
-            .padding(.horizontal, large ? 15 : 10)
-            .padding(.top, large ? 19 : 12)
-            .frame(maxHeight: .infinity, alignment: .top)
         }
         .aspectRatio(0.69, contentMode: .fit)
         .shadow(color: .black.opacity(0.17), radius: 9, x: 2, y: 8)
-        .accessibilityLabel("封面：\(title)")
+        .accessibilityLabel("封面：\\(title)")
     }
 }
 
@@ -429,7 +456,7 @@ private struct BookOpeningOverlay: View {
                     )
             }
             .frame(width: bookWidth, height: bookHeight)
-            .scaleEffect(stage == 0 ? 0.67 : 1)
+            .scaleEffect(stage == 0 ? 0.67 : (stage >= 2 ? 1.25 : 1))
             .shadow(color: .black.opacity(0.25), radius: 18, y: 13)
         }
         .allowsHitTesting(true)
@@ -597,9 +624,14 @@ struct RootView: View {
             .sheet(isPresented: $settings) {
                 SettingsView().environmentObject(library).presentationDetents([.medium, .large])
             }
-            .fullScreenCover(item: $selected) { book in
-                ReaderOpeningTransition(book: book, onClose: { selected = nil })
-                    .environmentObject(library)
+            // Present in the same view hierarchy. A fullScreenCover always
+            // slides upward on iOS, breaking the physical book-opening motion.
+            .overlay {
+                if let book = selected {
+                    ReaderOpeningTransition(book: book, onClose: { selected = nil })
+                        .environmentObject(library)
+                        .zIndex(20)
+                }
             }
 
     }
