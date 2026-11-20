@@ -71,6 +71,30 @@ jobs:
                   }))
           print("Installed 12 minimalist PNG book covers without cropping")
           PY
+      - name: Install ten minimalist book-spine assets
+        run: |
+          set -euo pipefail
+          archive="BookX/Assets.xcassets/AppIcon.appiconset/BookX_Minimal_Spines_10.zip"
+          git show "origin/main:$archive" > /tmp/BookX_Minimal_Spines_10.zip
+          python3 - <<'PY'
+          import json, zipfile
+          from pathlib import Path
+          base = Path("BookX/Assets.xcassets")
+          with zipfile.ZipFile("/tmp/BookX_Minimal_Spines_10.zip") as z:
+              for n in range(1, 11):
+                  name = f"BookSpine{n:02d}.png"
+                  matches = [p for p in z.namelist() if Path(p).name == name and not p.startswith("__MACOSX/")]
+                  if len(matches) != 1:
+                      raise RuntimeError(f"Expected one {name}, found {matches}")
+                  dest = base / f"BookSpine{n:02d}.imageset"
+                  dest.mkdir(parents=True, exist_ok=True)
+                  (dest / name).write_bytes(z.read(matches[0]))
+                  (dest / "Contents.json").write_text(json.dumps({
+                      "images": [{"filename": name, "idiom": "universal"}],
+                      "info": {"author": "xcode", "version": 1}
+                  }))
+          print("Installed ten minimalist spine assets without changing library layout")
+          PY
       - name: Generate project
         run: xcodegen generate
       - name: Compile simulator app
