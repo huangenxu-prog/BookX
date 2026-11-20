@@ -272,9 +272,14 @@ private struct BookCover: View {
                 }
 
                 if UIImage(named: artworkName) != nil {
+                    // Source illustrations contain a centered book surrounded
+                    // by a wide parchment margin. Fill with the actual book,
+                    // rather than showing a miniature book inside the cover.
                     Image(artworkName)
                         .resizable()
                         .scaledToFill()
+                        .frame(width: w, height: h)
+                        .scaleEffect(2.05)
                         .frame(width: w, height: h)
                         .clipped()
                 }
