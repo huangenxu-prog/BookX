@@ -1,4 +1,5 @@
 name: Build BookX iOS
+# Build triggered by pushes to the BookX development branch.
 on:
   workflow_dispatch:
   push:
