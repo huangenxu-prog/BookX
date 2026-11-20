@@ -213,10 +213,22 @@ private struct BookCover: View {
         ][style]
     }
     private var artworkName: String {
-        let seed = title.unicodeScalars.reduce(UInt64(1469598103934665603)) {
-            ($0 ^ UInt64($1.value)) &* UInt64(1099511628211)
+        let name = shortTitle
+        let index: Int
+        if name.contains("罪与罚") { index = 7 }
+        else if name.contains("万历") { index = 2 }
+        else if name.contains("十日") { index = 10 }
+        else if name.contains("明朝") { index = 1 }
+        else if name.contains("牧神") { index = 4 }
+        else if name.contains("沧浪") { index = 9 }
+        else if name.contains("资治") { index = 9 }
+        else if name.contains("道氏") { index = 11 }
+        else {
+            let seed = name.unicodeScalars.reduce(UInt64(1469598103934665603)) {
+                ($0 ^ UInt64($1.value)) &* UInt64(1099511628211)
+            }
+            index = Int(seed % 12) + 1
         }
-        let index = [1, 2, 7, 10, 4, 9][style]
         return String(format: "BookCover%02d", index)
     }
     private var lightCover: Bool { style == 1 || style == 5 }
@@ -288,7 +300,7 @@ private struct BookCover: View {
                     Spacer().frame(height: h * 0.15)
                     Text(shortTitle)
                         .font(.system(size: large ? 19 : 11, weight: .semibold, design: .serif))
-                        .foregroundStyle(ink)
+                         .foregroundStyle(UIImage(named: artworkName) == nil ? ink : (artworkName == "BookCover02" || artworkName == "BookCover07" || artworkName == "BookCover01" || artworkName == "BookCover10" ? Color(red: 0.97, green: 0.85, blue: 0.62) : Color(red: 0.25, green: 0.20, blue: 0.16)))
                         .multilineTextAlignment(.center)
                         .lineLimit(large ? 4 : 3)
                         .minimumScaleFactor(0.68)
@@ -562,36 +574,26 @@ private struct ReaderOpeningTransition: View {
     @State private var revealReader = false
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                ReaderView(book: book, onClose: onClose)
-                    .environmentObject(library)
-                    .opacity(revealReader || reduceMotion ? 1 : 0)
+        ZStack {
+            ReaderView(book: book, onClose: onClose)
+                .environmentObject(library)
+                .opacity(revealReader || reduceMotion ? 1 : 0)
 
-                if !reduceMotion {
-                    // Continue from the exact open-book frame on the shelf.
-                    // Expand its paper into the reader instead of letting the
-                    // default fullScreenCover slide up as a second animation.
-                    BookOpeningOverlay(title: book.title, stage: 3, showBackdrop: false)
-                        .scaleEffect(revealReader ? max(
-                            geometry.size.width / 228,
-                            geometry.size.height / 334
-                        ) * 1.12 : 1)
-                        .opacity(revealReader ? 0 : 1)
-                        .allowsHitTesting(!revealReader)
-                        .accessibilityHidden(true)
-                        .ignoresSafeArea()
-                }
+            if !reduceMotion {
+                // A single, short cover-to-reader dissolve. Do not introduce
+                // a second 3D page turn after the initial shelf animation.
+                BookCover(title: book.title, large: true)
+                    .frame(width: 228, height: 334)
+                    .scaleEffect(revealReader ? 1.12 : 1)
+                    .opacity(revealReader ? 0 : 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            // Only the transition artwork and paper extend under system bars.
-            // ReaderView owns its safe-area policy: curl is full-screen, while
-            // scroll/swipe controls must remain inside the interactive area.
-            .background(Color(red: 0.96, green: 0.92, blue: 0.83).ignoresSafeArea())
         }
+        .background(Color(red: 0.96, green: 0.92, blue: 0.83).ignoresSafeArea())
         .onAppear {
             guard !reduceMotion else { revealReader = true; return }
-            withAnimation(.easeInOut(duration: 0.55)) {
+            withAnimation(.easeOut(duration: 0.28)) {
                 revealReader = true
             }
         }
