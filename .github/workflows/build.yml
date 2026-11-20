@@ -50,7 +50,11 @@ jobs:
           # Fetch that exact binary directly; do not re-crop or recolor it.
           git fetch --depth=1 origin main
           archive="BookX/Assets.xcassets/AppIcon.appiconset/BookX_Minimal_Covers_12.zip"
-          git show "origin/main:$archive" > /tmp/BookX_Minimal_Covers_12.zip
+          # This archive was removed from main after upload; pin its original
+          # upload commit so the already-approved cover artwork stays unchanged.
+          cover_commit="b57a21f8fb70d5273f915056a06f50c235d233bf"
+          git fetch --depth=1 origin "$cover_commit"
+          git show "$cover_commit:$archive" > /tmp/BookX_Minimal_Covers_12.zip
           python3 - <<'PY'
           import json, zipfile
           from pathlib import Path
