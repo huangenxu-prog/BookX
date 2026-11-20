@@ -497,6 +497,7 @@ private struct BookOpeningOverlay: View {
     let title: String
     let stage: Int
     var showBackdrop: Bool = true
+    var fromLibrary: Bool = false
 
     var body: some View {
         ZStack {
@@ -506,8 +507,17 @@ private struct BookOpeningOverlay: View {
             // no reverse-opening hinge, and no second page-turn animation.
             BookCover(title: title, large: true)
                 .frame(width: 228, height: 334)
-                .scaleEffect(stage == 0 ? 0.76 : (stage == 1 ? 0.96 : 1.13))
-                .rotationEffect(.degrees(stage == 0 ? -4 : 0))
+                .scaleEffect(fromLibrary
+                    ? (stage == 0 ? 0.84 : (stage == 1 ? 0.98 : 1.13))
+                    : (stage == 0 ? 0.76 : (stage == 1 ? 0.96 : 1.13)))
+                // Library spines face sideways; rotate the cover into view.
+                // Shelf covers are already front-facing and remain unchanged.
+                .rotation3DEffect(
+                    .degrees(fromLibrary && stage == 0 ? 78 : 0),
+                    axis: (x: 0, y: 1, z: 0),
+                    perspective: 0.42
+                )
+                .rotationEffect(.degrees(!fromLibrary && stage == 0 ? -4 : 0))
                 .shadow(color: .black.opacity(0.20), radius: 17, y: 11)
         }
         .allowsHitTesting(true)
@@ -595,7 +605,8 @@ struct RootView: View {
                 bottomBar
             }
             if let animatedBook {
-                BookOpeningOverlay(title: animatedBook.title, stage: bookOpeningStage)
+                BookOpeningOverlay(title: animatedBook.title, stage: bookOpeningStage,
+                                   fromLibrary: tab == 1)
                     .transition(.opacity)
                     .zIndex(10)
             }
