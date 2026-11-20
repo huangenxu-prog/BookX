@@ -181,7 +181,7 @@ private enum BookXStyle {
     static let lilac = Color(red: 0.86, green: 0.91, blue: 0.85) // Soft sage
     static let ink = Color(red: 0.14, green: 0.19, blue: 0.16)
     static let muted = Color(red: 0.47, green: 0.53, blue: 0.49)
-    static let paper = Color(red: 0.973, green: 0.977, blue: 0.960)
+    static let paper = Color(red: 248.0 / 255, green: 249.0 / 255, blue: 244.0 / 255)
     static let panel = Color.white.opacity(0.84)
 }
 
@@ -540,7 +540,7 @@ private struct ReaderOpeningTransition: View {
                     .accessibilityHidden(true)
             }
         }
-        .background(Color(red: 0.96, green: 0.92, blue: 0.83).ignoresSafeArea())
+        .background(BookXStyle.paper.ignoresSafeArea())
         .onAppear {
             // ReaderView starts loading immediately behind the cover.
             // Keep the cover visible until its first pages are ready.
@@ -704,6 +704,42 @@ struct RootView: View {
                 .foregroundStyle(BookXStyle.muted)
         }.padding(.bottom, 9)
     }
+    private var readingLandscape: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [
+                        Color(red: 1, green: 0.81, blue: 0.69).opacity(0.65),
+                        .clear
+                    ], center: .center, startRadius: 0, endRadius: w * 0.23))
+                    .frame(width: w * 0.48, height: w * 0.48)
+                    .position(x: w * 0.77, y: h * 0.28)
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: h * 0.55))
+                    path.addCurve(to: CGPoint(x: w, y: h * 0.55),
+                                  control1: CGPoint(x: w * 0.30, y: h * 0.38),
+                                  control2: CGPoint(x: w * 0.67, y: h * 0.67))
+                    path.addLine(to: CGPoint(x: w, y: h * 0.75))
+                    path.addLine(to: CGPoint(x: 0, y: h * 0.75))
+                    path.closeSubpath()
+                }.fill(Color(red: 0.76, green: 0.84, blue: 0.79).opacity(0.26))
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: h * 0.66))
+                    path.addCurve(to: CGPoint(x: w, y: h * 0.65),
+                                  control1: CGPoint(x: w * 0.32, y: h * 0.53),
+                                  control2: CGPoint(x: w * 0.68, y: h * 0.77))
+                    path.addLine(to: CGPoint(x: w, y: h * 0.79))
+                    path.addLine(to: CGPoint(x: 0, y: h * 0.79))
+                    path.closeSubpath()
+                }.fill(Color(red: 0.68, green: 0.79, blue: 0.73).opacity(0.20))
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     @ViewBuilder private var continueContent: some View {
         if let book = recent.first {
             VStack(spacing: 22) {
@@ -726,6 +762,7 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 66)
+            .background { readingLandscape }
         } else {
             VStack(spacing: 18) {
                 Image(systemName: "book.pages")
@@ -740,6 +777,7 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 150)
+            .background { readingLandscape }
         }
     }
 
@@ -883,7 +921,8 @@ struct SettingsView: View {
         ("白色", .white),
         ("米黄", Color(red: 0.97, green: 0.93, blue: 0.85)),
         ("护眼绿", Color(red: 0.86, green: 0.92, blue: 0.85)),
-        ("深色", Color(red: 0.13, green: 0.13, blue: 0.13))
+        ("深色", Color(red: 0.13, green: 0.13, blue: 0.13)),
+        ("暖白", Color(red: 248.0 / 255, green: 249.0 / 255, blue: 244.0 / 255))
     ]
     var body: some View {
         NavigationStack {
