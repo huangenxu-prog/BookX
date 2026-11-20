@@ -213,23 +213,12 @@ private struct BookCover: View {
         ][style]
     }
     private var artworkName: String {
-        let name = shortTitle
-        let index: Int
-        if name.contains("罪与罚") { index = 7 }
-        else if name.contains("万历") { index = 2 }
-        else if name.contains("十日") { index = 10 }
-        else if name.contains("明朝") { index = 1 }
-        else if name.contains("牧神") { index = 4 }
-        else if name.contains("沧浪") { index = 9 }
-        else if name.contains("资治") { index = 9 }
-        else if name.contains("道氏") { index = 11 }
-        else {
-            let seed = name.unicodeScalars.reduce(UInt64(1469598103934665603)) {
-                ($0 ^ UInt64($1.value)) &* UInt64(1099511628211)
-            }
-            index = Int(seed % 12) + 1
+        // Stable distribution across all twelve designs, independent of
+        // book subject or reading order. The same title keeps its cover.
+        let seed = shortTitle.unicodeScalars.reduce(UInt64(1469598103934665603)) {
+            ($0 ^ UInt64($1.value)) &* UInt64(1099511628211)
         }
-        return String(format: "BookCover%02d", index)
+        return String(format: "BookCover%02d", Int(seed % 12) + 1)
     }
     private var lightCover: Bool { style == 1 || style == 5 }
     private var gold: Color { Color(red: 0.82, green: 0.68, blue: 0.44) }
