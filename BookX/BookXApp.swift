@@ -234,7 +234,7 @@ private struct BookCover: View {
         // Minimalist covers have varying pale and dark backgrounds.
         // Keep typography quiet and contrast-aware by cover design.
         switch coverNumber {
-        case 2, 4, 7, 9, 11: return Color(red: 0.22, green: 0.25, blue: 0.24)
+        case 2, 4, 7, 9, 10, 12: return Color(red: 0.16, green: 0.19, blue: 0.20)
         default: return Color(red: 0.94, green: 0.91, blue: 0.82)
         }
     }
