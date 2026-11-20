@@ -42,6 +42,27 @@ jobs:
           test -s "BookX/Assets.xcassets/BookShelfWood.imageset/BookShelfWood.png"
           test -s "BookX/Assets.xcassets/BookShelfWood.imageset/Contents.json"
           echo "Installed 10 book spine assets and wooden shelf."
+      - name: Install twelve illustrated book covers
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, zipfile
+          from pathlib import Path
+          archive = Path("BookX/Assets.xcassets/AppIcon.appiconset/BookX_Covers_12.zip")
+          if not archive.is_file():
+              raise SystemExit("Missing uploaded BookX_Covers_12.zip")
+          base = Path("BookX/Assets.xcassets")
+          with zipfile.ZipFile(archive) as z:
+              for n in range(1, 13):
+                  name = f"BookCover{n:02d}.jpg"
+                  dest = base / f"BookCover{n:02d}.imageset"
+                  dest.mkdir(parents=True, exist_ok=True)
+                  (dest / name).write_bytes(z.read(name))
+                  contents = {"images": [{"filename": name, "idiom": "universal"}],
+                              "info": {"author": "xcode", "version": 1}}
+                  (dest / "Contents.json").write_text(json.dumps(contents))
+          print("Installed 12 illustrated covers")
+          PY
       - name: Generate project
         run: xcodegen generate
       - name: Compile simulator app
