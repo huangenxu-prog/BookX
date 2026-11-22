@@ -18,6 +18,7 @@ struct CurlPageView: UIViewControllerRepresentable {
     let bottomInset: CGFloat
     let contentID: UUID
     let positionLabels: [String]
+    var highlightRange: NSRange? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -111,7 +112,9 @@ struct CurlPageView: UIViewControllerRepresentable {
                                                  alternative: pages[index].text)
                         } else {
                             ScreenPageView(text: pages[index].text, fontSize: fontSize,
-                                           lineSpacing: lineSpacing, ink: parent.ink)
+                                           lineSpacing: lineSpacing, ink: parent.ink,
+                                           highlightRange: index == parent.currentPage
+                                               ? parent.highlightRange : nil)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

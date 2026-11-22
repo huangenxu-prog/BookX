@@ -27,7 +27,12 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
     @Published private(set) var isSpeaking = false
     @Published private(set) var isPaused = false
     @Published private(set) var finishedPage: Int?
-    @Published private(set) var engineName = "在线语音"
+    @Published private(set) var engineName = "准备朗读"
+    /// UTF-16 range in the unmodified text of the current reading page.
+    @Published private(set) var activeRange: NSRange?
+    @Published var systemOnly = UserDefaults.standard.bool(forKey: "BookX.speech.systemOnly") {
+        didSet { UserDefaults.standard.set(systemOnly, forKey: "BookX.speech.systemOnly") }
+    }
     @Published var voiceID: String = BookVoice.choices[0].id {
         didSet { UserDefaults.standard.set(voiceID, forKey: "BookX.speech.voice") }
     }
@@ -41,7 +46,11 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
     private var networkTask: Task<Void, Never>?
     private var activePage: Int?
     private var generation = UUID()
-    private var segments: [String] = []
+    private struct SpeechPart {
+        let text: String
+        let range: NSRange
+    }
+    private var segments: [SpeechPart] = []
     private var segmentIndex = 0
     private var deferredSystemText: String?
     private var edgeRetryAfter: Date?
@@ -59,8 +68,8 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
     }
 
     func play(_ text: String, page: Int) {
-        stop()
-        segments = Self.split(text, maxUTF8Bytes: 2400)
+        stopPlayback(deactivateSession: false)
+        segments = Self.split(text, maximumUTF8Bytes: 640)
         guard !segments.isEmpty else {
             finishedPage = page
             return
@@ -81,32 +90,48 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
         }
     }
 
-    private static func split(_ text: String, maxUTF8Bytes: Int) -> [String] {
-        var result: [String] = []
+    /// Build small sentence-aligned pieces, preserving every UTF-16 offset.
+    /// Keeping the source text unchanged avoids drift between audio and page layout.
+    private static func split(_ text: String, maximumUTF8Bytes: Int) -> [SpeechPart] {
+        var result: [SpeechPart] = []
         var partial = ""
-        var byteCount = 0
-        for character in text {
-            let count = String(character).utf8.count
-            if byteCount + count > maxUTF8Bytes && !partial.isEmpty {
-                if !partial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    result.append(partial)
-                }
-                partial = ""
-                byteCount = 0
+        var bytes = 0
+        var utf16Location = 0
+        var partStart = 0
+
+        func appendPart() {
+            guard !partial.isEmpty else { return }
+            if !partial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                result.append(SpeechPart(
+                    text: partial,
+                    range: NSRange(location: partStart, length: utf16Location - partStart)))
             }
-            partial.append(character)
-            byteCount += count
+            partial = ""
+            bytes = 0
+            partStart = utf16Location
         }
-        if !partial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            result.append(partial)
+
+        for char in text {
+            let piece = String(char)
+            if bytes + piece.utf8.count > maximumUTF8Bytes && !partial.isEmpty {
+                appendPart()
+            }
+            partial.append(char)
+            bytes += piece.utf8.count
+            utf16Location += piece.utf16.count
+            if ("。！？；!?\n".contains(char) && partial.utf16.count >= 18) ||
+                partial.utf16.count >= 180 {
+                appendPart()
+            }
         }
+        appendPart()
         return result
     }
 
     private func beginSegment() {
         guard activePage != nil, segments.indices.contains(segmentIndex), !isPaused else { return }
-        let text = segments[segmentIndex]
-        if let retryAt = edgeRetryAfter, retryAt > Date() {
+        let text = segments[segmentIndex].text
+        if systemOnly || (edgeRetryAfter != nil && edgeRetryAfter! > Date()) {
             startSystem(text)
             return
         }
@@ -140,6 +165,7 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
             player.prepareToPlay()
             audioPlayer = player
             engineName = "Edge 自然语音"
+            activeRange = segments[segmentIndex].range
             if !isPaused && !player.play() {
                 audioPlayer = nil
                 startSystem(segments[segmentIndex])
@@ -151,6 +177,7 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
 
     private func startSystem(_ text: String) {
         engineName = "iPhone 系统语音"
+        activeRange = segments.indices.contains(segmentIndex) ? segments[segmentIndex].range : nil
         if isPaused {
             deferredSystemText = text
             return
@@ -183,7 +210,9 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
         }
     }
 
-    func stop() {
+    func stop() { stopPlayback(deactivateSession: true) }
+
+    private func stopPlayback(deactivateSession: Bool) {
         generation = UUID()
         networkTask?.cancel()
         networkTask = nil
@@ -199,13 +228,19 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
         isSpeaking = false
         isPaused = false
         finishedPage = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        activeRange = nil
+        engineName = "准备朗读"
+        if deactivateSession {
+            try? AVAudioSession.sharedInstance().setActive(
+                false, options: [.notifyOthersOnDeactivation])
+        }
     }
 
     private func finishSegment() {
         guard let page = activePage else { return }
         audioPlayer = nil
         activeUtterance = nil
+        activeRange = nil
         segmentIndex += 1
         if segments.indices.contains(segmentIndex) {
             if !isPaused { beginSegment() }
@@ -214,6 +249,25 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
             isPaused = false
             activePage = nil
             finishedPage = page
+        }
+    }
+
+    /// Native speech supplies genuine word timing; online audio supplies a
+    /// sentence-sized highlight instead of fabricated per-character timing.
+    nonisolated func speechSynthesizer(
+        _ synthesizer: AVSpeechSynthesizer,
+        willSpeakRangeOfSpeechString characterRange: NSRange,
+        utterance: AVSpeechUtterance
+    ) {
+        Task { @MainActor in
+            guard self.activeUtterance === utterance,
+                  self.segments.indices.contains(self.segmentIndex) else { return }
+            let part = self.segments[self.segmentIndex]
+            guard characterRange.location >= 0, characterRange.length > 0,
+                  NSMaxRange(characterRange) <= (part.text as NSString).length else { return }
+            self.activeRange = NSRange(
+                location: part.range.location + characterRange.location,
+                length: characterRange.length)
         }
     }
 

@@ -158,7 +158,7 @@ enum EdgeSpeech {
             forHTTPHeaderField: "User-Agent")
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForRequest = 6
         let session = URLSession(configuration: configuration)
         let socket = session.webSocketTask(with: request)
         socket.resume()
@@ -203,7 +203,7 @@ enum EdgeSpeech {
                     }
                 }
                 group.addTask {
-                    try await Task.sleep(nanoseconds: 20_000_000_000)
+                    try await Task.sleep(nanoseconds: 6_000_000_000)
                     throw Failure.timeout
                 }
                 defer {

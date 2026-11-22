@@ -42,6 +42,10 @@ struct ReaderView: View {
         }
     }
     private var ink: Color { library.paper == 3 ? .white : .black }
+    private func narratedRange(on page: ReadingPage) -> NSRange? {
+        guard listening, page.location == spokenLocation else { return nil }
+        return speech.activeRange
+    }
     // The curl controller must fill the physical screen; keep controls inside safe bounds.
     // Avoid counting the safe-area gap twice inside the full-screen curl sheet.
     private var curlTopInset: CGFloat { screenSafeInsets.top + 4 }
@@ -71,7 +75,9 @@ struct ReaderView: View {
                     ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else if library.pageMode == 0 {
-                CurlPageView(pages: pages, bookURL: epubIndex == nil ? nil : library.fileURL(book), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset, contentID: windowRevision, positionLabels: pages.indices.map(positionLabel))
+                CurlPageView(pages: pages, bookURL: epubIndex == nil ? nil : library.fileURL(book), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset, contentID: windowRevision, positionLabels: pages.indices.map(positionLabel),
+                             highlightRange: pages.indices.contains(currentPage)
+                                 ? narratedRange(on: pages[currentPage]) : nil)
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .clipped()
             } else if library.pageMode == 1 {
@@ -83,7 +89,8 @@ struct ReaderView: View {
                                                      alternative: pages[i].text)
                             } else {
                                 ScreenPageView(text: pages[i].text, fontSize: library.fontSize,
-                                               lineSpacing: library.lineSpacing, ink: ink)
+                                               lineSpacing: library.lineSpacing, ink: ink,
+                                               highlightRange: narratedRange(on: pages[i]))
                             }
                         }.tag(i)
                     }
@@ -99,7 +106,7 @@ struct ReaderView: View {
                                                          alternative: page.text)
                                         .frame(height: max(240, geometry.size.height * 0.75))
                                 } else {
-                                    pageText(page.text)
+                                    pageText(page)
                                 }
                             }.id(page.location)
                         }
@@ -229,6 +236,22 @@ struct ReaderView: View {
                         }
                     }
                     Menu {
+                        Button {
+                            speech.systemOnly = false
+                            if listening { speakCurrentPage() }
+                        } label: {
+                            Label("优先 Edge 自然语音",
+                                  systemImage: speech.systemOnly ? "waveform" : "checkmark")
+                        }
+                        Button {
+                            speech.systemOnly = true
+                            if listening { speakCurrentPage() }
+                        } label: {
+                            Label("仅用 iPhone 系统语音",
+                                  systemImage: speech.systemOnly ? "checkmark" : "waveform")
+                        }
+                    } label: { Label("朗读来源", systemImage: "speaker.wave.2") }
+                    Menu {
                         ForEach(BookVoice.choices) { option in
                             Button {
                                 speech.voiceID = option.id
@@ -250,6 +273,10 @@ struct ReaderView: View {
                             }
                         }
                     } label: { Label("听书语速", systemImage: "speedometer") }
+                    if listening {
+                        Button(speech.engineName) {}
+                            .disabled(true)
+                    }
                 } label: {
                     Image(systemName: "ellipsis").font(.title3).frame(width: 44, height: 44)
                 }
@@ -294,8 +321,16 @@ struct ReaderView: View {
         }
     }
 
-    private func pageText(_ text: String) -> some View {
-        Text(text)
+    private func pageText(_ page: ReadingPage) -> some View {
+        let attributed = NSMutableAttributedString(string: page.text)
+        if let range = narratedRange(on: page),
+           range.location >= 0, range.length > 0,
+           NSMaxRange(range) <= attributed.length {
+            attributed.addAttribute(.backgroundColor,
+                                    value: UIColor.systemYellow.withAlphaComponent(0.35),
+                                    range: range)
+        }
+        return Text(AttributedString(attributed))
             .font(.system(size: library.fontSize))
             .lineSpacing(library.lineSpacing)
             .foregroundStyle(ink)
