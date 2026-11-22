@@ -21,73 +21,103 @@ enum EdgeSpeech {
     private static let chromium = "143.0.3650.75"
     private static let copyright = "Copyright (C) Microsoft Corporation. All rights reserved."
 
-    /// v2 signature as verified against rany2/edge-tts' CS64 + SHA256 algorithm.
-    /// The SHA256 input includes Microsoft's 57-byte copyright prefix.
-    static func signature(at date: Date = Date()) -> String {
-        let seconds = Int64(date.timeIntervalSince1970) + 11_644_473_600
-        let ticks = (seconds - seconds % 300) * 10_000_000
-        let message = Data((copyright + String(ticks) + token).utf8)
-        let digest = Data(SHA256.hash(data: message))
-        let checksum = cs64(message: message, digest: digest)
-        return (checksum + digest).map { String(format: "%02X", $0) }.joined()
-            .replacingOccurrences(of: "", with: "") // formatted below with checksum delimiter
-    }
-
+    /// v2 token: SHA256 of the 57-byte Microsoft copyright prefix plus
+    /// the time-based salt, and the proprietary CS64 digest of the salt.
+    /// The latter is NOT a regular SHA256, nor a digest of the prefix.
     static func signatureV2(at date: Date = Date()) -> String {
         let seconds = Int64(date.timeIntervalSince1970) + 11_644_473_600
         let ticks = (seconds - seconds % 300) * 10_000_000
-        let message = Data((copyright + String(ticks) + token).utf8)
-        let digest = Data(SHA256.hash(data: message))
-        let cs = cs64(message: message, digest: digest)
-        let hex: (Data) -> String = { $0.map { String(format: "%02X", $0) }.joined() }
-        return hex(cs) + "-" + hex(digest)
+        let salt = Data((String(ticks) + token).utf8)
+        let digest = Data(SHA256.hash(data: Data(copyright.utf8) + salt))
+        let checksum = cs64(salt: salt, digest: digest)
+        func hex(_ bytes: Data) -> String {
+            bytes.map { String(format: "%02X", $0) }.joined()
+        }
+        return hex(checksum) + "-" + hex(digest)
     }
 
-    private static func rotate16(_ x: UInt32) -> UInt32 { (x << 16) | (x >> 16) }
+    private static func rotate16(_ value: UInt32) -> UInt32 {
+        (value << 16) | (value >> 16)
+    }
+
     private static func littleWord(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
         UInt32(bytes[offset]) | (UInt32(bytes[offset + 1]) << 8)
             | (UInt32(bytes[offset + 2]) << 16) | (UInt32(bytes[offset + 3]) << 24)
     }
-    private static func swap(_ word: UInt32, _ key: UInt32,
-                             _ a: UInt32, _ b: UInt32, _ c: UInt32) -> UInt32 {
-        let sum = (word &* key) &+ (rotate16(word) &* a)
-        let product = rotate16(sum) &* b
-        return (rotate16(product) &* c) &+ product
-    }
-    private static func mix(_ value: UInt32, _ factors: [UInt32]) -> UInt32 {
-        factors.reduce(value) { rotate16($0) &* $1 }
-    }
 
-    private static func cs64(message: Data, digest: Data) -> Data {
+    private static func cs64(salt: Data, digest: Data) -> Data {
         let digestBytes = Array(digest)
-        let firstKey = littleWord(digestBytes, 0) | 1
-        let secondKey = littleWord(digestBytes, 4) | 1
-        var bytes = Array(message)
-        bytes += [UInt8](repeating: 0, count: (8 - bytes.count % 8) % 8)
-        var sum: UInt32 = 0
-        var last: UInt32 = 0
-        var state: UInt32 = 0
-        var stateSum: UInt32 = 0
-        for offset in stride(from: 0, to: bytes.count, by: 8) {
-            let a = littleWord(bytes, offset)
-            let b = littleWord(bytes, offset + 4)
-            let first = swap(a, firstKey, 0xEF0569FB, 0x76F50F34, 0xC3EFEA97)
-            last = swap(b, secondKey, 0xC31713DB, 0x1881CE3C, 0x35BD1EC9)
-            sum = sum &+ first &+ last
-            state = mix((state &+ a) &* firstKey,
-                        [0xCF98B111, 0x87085B9F, 0x12CEB96D, 0x257E1D83])
-            stateSum = stateSum &+ state
-            state = mix((state &+ b) &* secondKey,
-                        [0xA27416F5, 0xD38396FF, 0x7C932B89, 0xBFA49F69])
-            stateSum = stateSum &+ state
+        let keyA = littleWord(digestBytes, 0) | 1
+        let keyB = littleWord(digestBytes, 4) | 1
+        let factor: UInt32 = 0x82893933
+        let factors: [UInt32] = [keyA &* factor, keyB &* factor]
+        // The fourteen seed terms/offsets are part of the v2 CS64 algorithm.
+        let constants: [(UInt32, UInt32)] = [
+            (0xE82E91B1, 0xB32700D0), (0x44DE24C6, 0x88DFF51D),
+            (0x3BEB65BC, 0x29514038), (0xC89C5933, 0xB328CBDF),
+            (0x8D1EC211, 0xD405B4D5), (0x314EF5D5, 0x26E55F3C),
+            (0xE92491B1, 0x607801C6), (0xF0A5B9D5, 0x82B2C1FB),
+            (0x06064CF3, 0xFA51A3DA), (0xDA79FA60, 0x207CC464),
+            (0xBED20560, 0x3C3C74F3), (0x89F9C9F8, 0xD2D14B61),
+            (0x35FA38C6, 0xBB04A2C1), (0xCB49E3C6, 0xC5626167)
+        ]
+        var terms: [UInt32] = constants.enumerated().map {
+            $0.element.0 &* factors[$0.offset % 2]
         }
-        var result = Data()
-        for word in [last ^ state, sum ^ stateSum] {
+        var offsets: [UInt32] = constants.map { $0.1 }
+        var bytes: [UInt8] = [0] + Array(salt)
+        while bytes.count % 4 != 0 { bytes.append(0) }
+        var words: [UInt32] = []
+        for i in stride(from: 0, to: bytes.count, by: 4) {
+            words.append(littleWord(bytes, i))
+        }
+        if words.count % 2 != 0 { words.append(0) }
+        for (index, word) in words.enumerated() {
+            var term = word &* (index % 2 == 0 ? keyA : keyB)
+            var offset = rotate16(word) &*
+                (index % 2 == 0 ? UInt32(0xEF0569FB) : UInt32(0xC31713DB))
+            if index == 0 {
+                term = term &+ (0xF2F90B1A &* factors[0])
+                offset = offset &+ 0x0B1A0000
+            }
+            terms.append(term)
+            offsets.append(offset)
+        }
+
+        var swapAcc: UInt32 = 0
+        var swapLast: UInt32 = 0
+        var state: UInt32 = 0
+        var acc: UInt32 = 0
+        for index in stride(from: 0, to: terms.count, by: 2) {
+            let x = terms[index]
+            let y = terms[index + 1]
+            var t = rotate16(offsets[index] &+ x)
+            var q = t &* 0x76F50F34
+            swapAcc = swapAcc &+ ((rotate16(q) &* 0xC3EFEA97) &+ q)
+            t = rotate16(offsets[index + 1] &+ y)
+            q = t &* 0x1881CE3C
+            swapLast = (rotate16(q) &* 0x35BD1EC9) &+ q
+            swapAcc = swapAcc &+ swapLast
+
+            state = state &* keyA &+ x
+            state = rotate16(state) &* 0xCF98B111
+            state = rotate16(state) &* 0x87085B9F
+            state = rotate16(state) &* 0x12CEB96D
+            state = rotate16(state) &* 0x257E1D83
+            acc = acc &+ state
+            t = state &* keyB &+ y
+            t = rotate16(t) &* 0xA27416F5
+            t = rotate16(t) &* 0xD38396FF
+            state = rotate16((rotate16(t) &* 0x7C932B89)) &* 0xBFA49F69
+            acc = acc &+ state
+        }
+        var output = Data()
+        for word in [swapLast ^ state, swapAcc ^ acc] {
             for shift in [0, 8, 16, 24] {
-                result.append(UInt8(truncatingIfNeeded: word >> shift))
+                output.append(UInt8(truncatingIfNeeded: word >> shift))
             }
         }
-        return result
+        return output
     }
 
     private static func escapeXML(_ text: String) -> String {
