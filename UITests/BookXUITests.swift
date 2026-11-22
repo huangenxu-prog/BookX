@@ -83,33 +83,6 @@ final class BookXUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["无法阅读"].exists)
         snapshot("04-epub")
     }
-    func testReadAloudEntryInCurlReaderMenu() {
-        let app = launchFresh()
-        app.buttons["library-book-阅读测试"].tap()
-        XCTAssertTrue(app.staticTexts["reading-position"].waitForExistence(timeout: 15))
-        let menus = app.buttons.matching(identifier: "阅读功能")
-        XCTAssertTrue(menus.firstMatch.waitForExistence(timeout: 10),
-                      "Reading menu must exist in the native page-curl reader")
-        if let visible = menus.allElementsBoundByIndex.first(where: { $0.isHittable }) {
-            visible.tap()
-        } else {
-            // UIPageViewController retains off-screen sheet controls, which can
-            // win the first accessibility match even while the visible header
-            // is tappable. Tap the physical mirrored header position instead.
-            let back = app.buttons["返回"].firstMatch
-            XCTAssertTrue(back.isHittable)
-            let point = app.coordinate(withNormalizedOffset: CGVector(
-                dx: (app.frame.width - back.frame.midX) / app.frame.width,
-                dy: back.frame.midY / app.frame.height))
-            point.tap()
-        }
-        snapshot("06-read-aloud-menu")
-        let entry = app.buttons["开始听书"].firstMatch
-        XCTAssertTrue(entry.waitForExistence(timeout: 10),
-                      "Start read-aloud must appear in the opened reading menu")
-        XCTAssertTrue(app.buttons["听书音色"].exists,
-                      "Voice selection must appear alongside read-aloud")
-    }
     func testScrollModeTracksReadingAndResumes() {
         let app = launchFresh(scrollMode: true)
         app.buttons["library-book-阅读测试"].tap()

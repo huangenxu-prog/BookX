@@ -101,8 +101,6 @@ struct ScreenPageView: UIViewRepresentable {
     let fontSize: Double
     let lineSpacing: Double
     let ink: Color
-    /// Optional range of the sentence/word currently being narrated.
-    var highlightRange: NSRange? = nil
 
     func makeUIView(context: Context) -> PageCanvas {
         let view = PageCanvas()
@@ -117,13 +115,11 @@ struct ScreenPageView: UIViewRepresentable {
         value.addAttribute(NSAttributedString.Key(kCTForegroundColorAttributeName as String),
                            value: UIColor(ink).cgColor, range: NSRange(location: 0, length: value.length))
         view.content = value
-        view.highlightRange = highlightRange
         view.accessibilityLabel = text
         view.setNeedsDisplay()
     }
     final class PageCanvas: UIView {
         var content = NSAttributedString(string: "")
-        var highlightRange: NSRange?
         override func layoutSubviews() { super.layoutSubviews(); setNeedsDisplay() }
         override func draw(_ rect: CGRect) {
             guard let context = UIGraphicsGetCurrentContext() else { return }
@@ -135,37 +131,7 @@ struct ScreenPageView: UIViewRepresentable {
                               width: floor(bounds.width) - ScreenPagination.horizontalInset * 2,
                               height: floor(bounds.height) - ScreenPagination.verticalInset * 2)
             guard area.width > 0, area.height > 0 else { context.restoreGState(); return }
-            let frame = ScreenPagination.frame(content, rect: area)
-            // Draw a translucent marker behind the exact Core Text glyphs.
-            // Text layout and page breaks are unchanged.
-            if let selected = highlightRange, selected.length > 0,
-               selected.location >= 0, NSMaxRange(selected) <= content.length {
-                let lines = CTFrameGetLines(frame) as! [CTLine]
-                var origins = [CGPoint](repeating: .zero, count: lines.count)
-                CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
-                context.setFillColor(UIColor.systemYellow.withAlphaComponent(0.35).cgColor)
-                for (i, line) in lines.enumerated() {
-                    let lineRange = CTLineGetStringRange(line)
-                    let beginning = max(selected.location, lineRange.location)
-                    let ending = min(NSMaxRange(selected), lineRange.location + lineRange.length)
-                    guard beginning < ending else { continue }
-                    var ascent: CGFloat = 0
-                    var descent: CGFloat = 0
-                    var leading: CGFloat = 0
-                    CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
-                    let left = CGFloat(CTLineGetOffsetForStringIndex(line, beginning, nil))
-                    let right = CGFloat(CTLineGetOffsetForStringIndex(line, ending, nil))
-                    let origin = origins[i]
-                    let marker = CGRect(x: origin.x + min(left, right) - 2,
-                                        y: origin.y - descent - 2,
-                                        width: abs(right - left) + 4,
-                                        height: ascent + descent + 4)
-                    context.addPath(CGPath(roundedRect: marker, cornerWidth: 3,
-                                           cornerHeight: 3, transform: nil))
-                    context.fillPath()
-                }
-            }
-            CTFrameDraw(frame, context)
+            CTFrameDraw(ScreenPagination.frame(content, rect: area), context)
             context.restoreGState()
         }
     }

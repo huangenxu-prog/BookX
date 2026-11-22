@@ -27,10 +27,6 @@ struct ReaderView: View {
     @State private var chapterError: String?
     @State private var resolvedNeighbors: [Int: Set<Int>] = [:]
     @State private var windowRevision = UUID()
-    @StateObject private var speech = BookSpeech()
-    @State private var listening = false
-    @State private var spokenLocation: EPUBLocation?
-    @State private var waitingForSpeechChapter = false
 
     private var bg: Color {
         switch library.paper {
@@ -42,10 +38,6 @@ struct ReaderView: View {
         }
     }
     private var ink: Color { library.paper == 3 ? .white : .black }
-    private func narratedRange(on page: ReadingPage) -> NSRange? {
-        guard listening, page.location == spokenLocation else { return nil }
-        return speech.activeRange
-    }
     // The curl controller must fill the physical screen; keep controls inside safe bounds.
     // Avoid counting the safe-area gap twice inside the full-screen curl sheet.
     private var curlTopInset: CGFloat { screenSafeInsets.top + 4 }
@@ -75,9 +67,7 @@ struct ReaderView: View {
                     ProgressView("正在打开书籍").frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else if library.pageMode == 0 {
-                CurlPageView(pages: pages, bookURL: epubIndex == nil ? nil : library.fileURL(book), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset, contentID: windowRevision, positionLabels: pages.indices.map(positionLabel),
-                             highlightRange: pages.indices.contains(currentPage)
-                                 ? narratedRange(on: pages[currentPage]) : nil)
+                CurlPageView(pages: pages, bookURL: epubIndex == nil ? nil : library.fileURL(book), currentPage: $currentPage, fontSize: library.fontSize, lineSpacing: library.lineSpacing, ink: ink, background: bg, header: AnyView(readerHeader), topInset: curlTopInset, bottomInset: curlBottomInset, contentID: windowRevision, positionLabels: pages.indices.map(positionLabel))
                     .id("curl-\(library.paper)-\(library.fontSize)-\(library.lineSpacing)")
                     .clipped()
             } else if library.pageMode == 1 {
@@ -89,8 +79,7 @@ struct ReaderView: View {
                                                      alternative: pages[i].text)
                             } else {
                                 ScreenPageView(text: pages[i].text, fontSize: library.fontSize,
-                                               lineSpacing: library.lineSpacing, ink: ink,
-                                               highlightRange: narratedRange(on: pages[i]))
+                                               lineSpacing: library.lineSpacing, ink: ink)
                             }
                         }.tag(i)
                     }
@@ -106,7 +95,7 @@ struct ReaderView: View {
                                                          alternative: page.text)
                                         .frame(height: max(240, geometry.size.height * 0.75))
                                 } else {
-                                    pageText(page)
+                                    pageText(page.text)
                                 }
                             }.id(page.location)
                         }
@@ -144,26 +133,12 @@ struct ReaderView: View {
         .ignoresSafeArea(edges: library.pageMode == 0 ? .vertical : [])
         .background(bg.ignoresSafeArea())
         .preferredColorScheme(library.paper == 3 ? .dark : .light)
-        .onChange(of: currentLocation) { _, location in
+        .onChange(of: currentLocation) { _, _ in
             savePosition()
             if epubIndex != nil { prefetchChapters() }
-            if listening && loaded && !waitingForSpeechChapter && location != spokenLocation {
-                speakCurrentPage()
-            }
-        }
-        .onChange(of: speech.finishedPage) { _, page in
-            if let page, listening { advanceListening(after: page) }
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { savePosition(); library.save() } }
-        .onDisappear {
-            stopListening()
-            chapterTask?.cancel()
-            prefetchTask?.cancel()
-            paginationTask?.cancel()
-            paginationGeneration = UUID()
-            savePosition()
-            library.save()
-        }
+        .onDisappear { chapterTask?.cancel(); prefetchTask?.cancel(); paginationTask?.cancel(); paginationGeneration = UUID(); savePosition(); library.save() }
         .sheet(isPresented: $showContents) {
             NavigationStack {
                 Group {
@@ -221,62 +196,7 @@ struct ReaderView: View {
                     Button { settings = true } label: {
                         Label("排版", systemImage: "textformat.size")
                     }
-                    Divider()
-                    if !listening {
-                        Button { startListening() } label: {
-                            Label("开始听书", systemImage: "waveform")
-                        }.disabled(!loaded)
-                    } else {
-                        Button { speech.togglePause() } label: {
-                            Label(speech.isPaused ? "继续听书" : "暂停听书",
-                                  systemImage: speech.isPaused ? "play.fill" : "pause.fill")
-                        }.disabled(!speech.isSpeaking)
-                        Button { stopListening() } label: {
-                            Label("停止听书", systemImage: "stop.fill")
-                        }
-                    }
-                    Menu {
-                        Button {
-                            speech.systemOnly = false
-                            if listening { speakCurrentPage() }
-                        } label: {
-                            Label("优先 Edge 自然语音",
-                                  systemImage: speech.systemOnly ? "waveform" : "checkmark")
-                        }
-                        Button {
-                            speech.systemOnly = true
-                            if listening { speakCurrentPage() }
-                        } label: {
-                            Label("仅用 iPhone 系统语音",
-                                  systemImage: speech.systemOnly ? "checkmark" : "waveform")
-                        }
-                    } label: { Label("朗读来源", systemImage: "speaker.wave.2") }
-                    Menu {
-                        ForEach(BookVoice.choices) { option in
-                            Button {
-                                speech.voiceID = option.id
-                                if listening { speakCurrentPage() }
-                            } label: {
-                                Label(option.title,
-                                      systemImage: speech.voiceID == option.id ? "checkmark" : "waveform")
-                            }
-                        }
-                    } label: { Label("听书音色", systemImage: "waveform") }
-                    Menu {
-                        ForEach([0.8, 1.0, 1.2, 1.3], id: \.self) { value in
-                            Button {
-                                speech.speed = value
-                                if listening { speakCurrentPage() }
-                            } label: {
-                                Label(String(format: "%.1fx", value),
-                                      systemImage: abs(speech.speed - value) < 0.01 ? "checkmark" : "speedometer")
-                            }
-                        }
-                    } label: { Label("听书语速", systemImage: "speedometer") }
-                    if listening {
-                        Button(speech.engineName) {}
-                            .disabled(true)
-                    }
+
                 } label: {
                     Image(systemName: "ellipsis").font(.title3).frame(width: 44, height: 44)
                 }
@@ -284,53 +204,8 @@ struct ReaderView: View {
             }.padding(.horizontal)
     }
 
-    private func startListening() {
-        guard loaded, pages.indices.contains(currentPage) else { return }
-        listening = true
-        speakCurrentPage()
-    }
-
-    private func stopListening() {
-        listening = false
-        waitingForSpeechChapter = false
-        spokenLocation = nil
-        speech.stop()
-    }
-
-    private func speakCurrentPage() {
-        guard listening, loaded, pages.indices.contains(currentPage) else { return }
-        spokenLocation = currentLocation
-        speech.play(pages[currentPage].text, page: currentPage)
-    }
-
-    private func advanceListening(after page: Int) {
-        guard listening, loaded, pages.indices.contains(currentPage) else { return }
-        // Current page may have shifted when an EPUB neighbor was prefetched.
-        // Its stable location, rather than the old array index, remains authoritative.
-        let next = currentPage + 1
-        if pages.indices.contains(next) {
-            move(to: next)
-            speakCurrentPage()
-        } else if let resource = pages[currentPage].resourceIndex,
-                  let index = epubIndex,
-                  resource + 1 < index.resources.count {
-            waitingForSpeechChapter = true
-            jumpToChapter(resource + 1)
-        } else {
-            stopListening()
-        }
-    }
-
-    private func pageText(_ page: ReadingPage) -> some View {
-        let attributed = NSMutableAttributedString(string: page.text)
-        if let range = narratedRange(on: page),
-           range.location >= 0, range.length > 0,
-           NSMaxRange(range) <= attributed.length {
-            attributed.addAttribute(.backgroundColor,
-                                    value: UIColor.systemYellow.withAlphaComponent(0.35),
-                                    range: range)
-        }
-        return Text(AttributedString(attributed))
+    private func pageText(_ text: String) -> some View {
+        Text(text)
             .font(.system(size: library.fontSize))
             .lineSpacing(library.lineSpacing)
             .foregroundStyle(ink)
@@ -539,23 +414,14 @@ struct ReaderView: View {
             onInitialReady?()
             savePosition()
             prefetchChapters()
-            if listening && waitingForSpeechChapter {
-                waitingForSpeechChapter = false
-                speakCurrentPage()
-            }
         } catch {
             guard !Task.isCancelled, generation == paginationGeneration else { return }
             errorMessage = error.localizedDescription
-            if waitingForSpeechChapter { stopListening() }
             onInitialReady?()
         }
     }
     private func jumpToChapter(_ resource: Int) {
         guard let layout = epubLayout else { return }
-        if listening {
-            waitingForSpeechChapter = true
-            speech.stop()
-        }
         savePosition()
         chapterTask?.cancel()
         prefetchTask?.cancel()

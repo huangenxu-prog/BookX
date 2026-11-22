@@ -27,8 +27,6 @@ targets:
       path: Generated/Info.plist
       properties:
         UILaunchScreen: {}
-        UIBackgroundModes:
-          - audio
     dependencies:
       - package: Markdown
         product: Markdown
