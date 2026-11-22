@@ -83,6 +83,22 @@ final class BookXUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["无法阅读"].exists)
         snapshot("04-epub")
     }
+    func testReadAloudEntryInCurlReaderMenu() {
+        let app = launchFresh()
+        app.buttons["library-book-阅读测试"].tap()
+        XCTAssertTrue(app.staticTexts["reading-position"].waitForExistence(timeout: 15))
+        let menu = app.buttons["阅读功能"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 10),
+                      "Reading menu must exist in the native page-curl reader")
+        XCTAssertTrue(menu.isHittable, "Reading menu must be tappable")
+        menu.tap()
+        snapshot("06-read-aloud-menu")
+        let entry = app.buttons["开始听书"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 10),
+                      "Start read-aloud must appear in the opened reading menu")
+        XCTAssertTrue(app.buttons["听书音色"].exists,
+                      "Voice selection must appear alongside read-aloud")
+    }
     func testScrollModeTracksReadingAndResumes() {
         let app = launchFresh(scrollMode: true)
         app.buttons["library-book-阅读测试"].tap()
