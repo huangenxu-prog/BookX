@@ -168,10 +168,10 @@ final class BookSpeech: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpe
             activeRange = segments[segmentIndex].range
             if !isPaused && !player.play() {
                 audioPlayer = nil
-                startSystem(segments[segmentIndex])
+                startSystem(segments[segmentIndex].text)
             }
         } catch {
-            startSystem(segments[segmentIndex])
+            startSystem(segments[segmentIndex].text)
         }
     }
 
